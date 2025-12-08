@@ -32,7 +32,7 @@ This homelab serves as a practical platform for learning and demonstrating DevOp
 **Compute (ARM Architecture):**
 
 - 2x Raspberry Pi 4 (4GB RAM) with M.2 SSD storage via Geekworm X862 expansion boards - **ONLINE** running observability services
-- 1x Raspberry Pi 3B+ for lightweight utilities - **ONLINE** running Homer dashboard and Pi-hole
+- 1x Raspberry Pi 3B+ - **DECOMMISSIONED** (unreliable, services moved to homelab-mgmt)
 
 **Networking:**
 

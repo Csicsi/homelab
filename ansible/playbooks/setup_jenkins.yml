@@ -1,0 +1,83 @@
+---
+- name: Setup Jenkins CI/CD Server
+  hosts: homelab-mgmt
+  become: true
+
+  vars:
+    jenkins_home: /srv/jenkins
+    jenkins_port: 9080
+    jenkins_agent_port: 50000
+
+  tasks:
+    - name: Create Jenkins data directory
+      ansible.builtin.file:
+        path: "{{ jenkins_home }}"
+        state: directory
+        owner: 1000
+        group: 1000
+        mode: "0755"
+
+    - name: Get docker group ID
+      ansible.builtin.command: getent group docker
+      register: docker_group
+      changed_when: false
+
+    - name: Extract docker GID
+      ansible.builtin.set_fact:
+        docker_gid: "{{ docker_group.stdout.split(':')[2] }}"
+
+    - name: Pull Jenkins Docker image
+      community.docker.docker_image:
+        name: jenkins/jenkins:lts
+        source: pull
+
+    - name: Run Jenkins container
+      community.docker.docker_container:
+        name: jenkins
+        image: jenkins/jenkins:lts
+        restart_policy: always
+        state: started
+        user: "jenkins"
+        groups:
+          - "{{ docker_gid }}"
+        ports:
+          - "{{ jenkins_port }}:8080"
+          - "{{ jenkins_agent_port }}:50000"
+        volumes:
+          - "{{ jenkins_home }}:/var/jenkins_home"
+          - /var/run/docker.sock:/var/run/docker.sock
+          - /usr/bin/docker:/usr/bin/docker
+          - /usr/libexec/docker/cli-plugins:/usr/libexec/docker/cli-plugins
+        env:
+          JENKINS_OPTS: "--prefix=/jenkins"
+
+    - name: Open Jenkins ports in firewall
+      community.general.ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - "{{ jenkins_port }}"
+        - "{{ jenkins_agent_port }}"
+
+    - name: Wait for Jenkins to generate initial admin password
+      ansible.builtin.wait_for:
+        path: "{{ jenkins_home }}/secrets/initialAdminPassword"
+        timeout: 120
+
+    - name: Read Jenkins initial admin password
+      ansible.builtin.slurp:
+        src: "{{ jenkins_home }}/secrets/initialAdminPassword"
+      register: jenkins_password
+
+    - name: Display Jenkins access information
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Jenkins Setup Complete!"
+          - "=========================================="
+          - "URL: http://{{ ansible_host }}:{{ jenkins_port }}/jenkins"
+          - "Initial admin password: {{ jenkins_password.content | b64decode | trim }}"
+          - ""
+          - "Data directory: {{ jenkins_home }}"
+          - "=========================================="

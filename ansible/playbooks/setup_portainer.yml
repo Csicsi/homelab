@@ -1,0 +1,56 @@
+---
+- name: Setup Portainer Container Management
+  hosts: homelab-mgmt
+  become: true
+
+  vars:
+    portainer_home: /srv/portainer
+    portainer_http_port: 9000
+    portainer_https_port: 9443
+
+  tasks:
+    - name: Create Portainer data directory
+      ansible.builtin.file:
+        path: "{{ portainer_home }}"
+        state: directory
+        mode: "0755"
+
+    - name: Pull Portainer Docker image
+      community.docker.docker_image:
+        name: portainer/portainer-ce:latest
+        source: pull
+
+    - name: Run Portainer container
+      community.docker.docker_container:
+        name: portainer
+        image: portainer/portainer-ce:latest
+        restart_policy: always
+        state: started
+        ports:
+          - "{{ portainer_http_port }}:9000"
+          - "{{ portainer_https_port }}:9443"
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock
+          - "{{ portainer_home }}:/data"
+
+    - name: Open Portainer ports in firewall
+      community.general.ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - "{{ portainer_http_port }}"
+        - "{{ portainer_https_port }}"
+
+    - name: Display Portainer access information
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Portainer Setup Complete!"
+          - "=========================================="
+          - "HTTPS: https://{{ ansible_host }}:{{ portainer_https_port }}"
+          - "HTTP:  http://{{ ansible_host }}:{{ portainer_http_port }}"
+          - ""
+          - "Create admin password on first login"
+          - "Data directory: {{ portainer_home }}"
+          - "=========================================="

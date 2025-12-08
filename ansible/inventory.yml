@@ -43,9 +43,3 @@ all:
           ansible_user: dcsicsak
           ansible_become: true
           ansible_become_method: sudo
-
-        pi3-utils:
-          ansible_host: 192.168.8.22
-          ansible_user: dcsicsak
-          ansible_become: true
-          ansible_become_method: sudo

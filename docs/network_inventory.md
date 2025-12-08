@@ -8,16 +8,16 @@ This document maintains a record of all network-connected devices, their MAC add
 
 ## DHCP Reservations
 
-| Device            | Hostname        | MAC Address         | IP Address    | Interface  | Notes             |
-| ----------------- | --------------- | ------------------- | ------------- | ---------- | ----------------- |
-| ThinkPad T440     | homelab-main    | `XX:XX:XX:XX:XX:XX` | 192.168.8.10  | eth0       | Main server       |
-| Asus X550C        | homelab-staging | `XX:XX:XX:XX:XX:XX` | 192.168.8.11  | eth0       | Staging node      |
-| MiniPC (Celeron)  | homelab-mgmt    | `XX:XX:XX:XX:XX:XX` | 192.168.8.12  | eth0       | Management/CI-CD  |
-| Raspberry Pi 4 #1 | pi4-node1       | `XX:XX:XX:XX:XX:XX` | 192.168.8.20  | eth0       | Critical services |
-| Raspberry Pi 4 #2 | pi4-node2       | `XX:XX:XX:XX:XX:XX` | 192.168.8.21  | eth0       | Critical services |
-| Raspberry Pi 3B+  | pi3-utils       | `XX:XX:XX:XX:XX:XX` | 192.168.8.22  | eth0       | Utilities         |
-| Workstation       | workstation     | `XX:XX:XX:XX:XX:XX` | 192.168.8.100 | eth0/wlan0 | Ansible control   |
-| Switch            | netgear-gs308ep | `XX:XX:XX:XX:XX:XX` | 192.168.8.2   | mgmt       | PoE+ switch       |
+| Device            | Hostname        | MAC Address         | IP Address    | Interface  | Notes                |
+| ----------------- | --------------- | ------------------- | ------------- | ---------- | -------------------- |
+| ThinkPad T440     | homelab-main    | `XX:XX:XX:XX:XX:XX` | 192.168.8.10  | eth0       | Main server          |
+| Asus X550C        | homelab-staging | `XX:XX:XX:XX:XX:XX` | 192.168.8.11  | eth0       | Staging node         |
+| MiniPC (Celeron)  | homelab-mgmt    | `XX:XX:XX:XX:XX:XX` | 192.168.8.12  | eth0       | Management/CI-CD/DNS |
+| Raspberry Pi 4 #1 | pi4-node1       | `XX:XX:XX:XX:XX:XX` | 192.168.8.20  | eth0       | Critical services    |
+| Raspberry Pi 4 #2 | pi4-node2       | `XX:XX:XX:XX:XX:XX` | 192.168.8.21  | eth0       | Critical services    |
+| Raspberry Pi 3B+  | pi3-utils       | `XX:XX:XX:XX:XX:XX` | 192.168.8.22  | eth0       | Utilities            |
+| Workstation       | workstation     | `XX:XX:XX:XX:XX:XX` | 192.168.8.100 | eth0/wlan0 | Ansible control      |
+| Switch            | netgear-gs308ep | `XX:XX:XX:XX:XX:XX` | 192.168.8.2   | mgmt       | PoE+ switch          |
 
 ---
 
@@ -93,9 +93,9 @@ Netgear GS308EP port assignments:
       |
       ├── [ThinkPad T440] (192.168.8.10)
       ├── [Asus X550C] (192.168.8.11)
+      ├── [MiniPC] (192.168.8.12) - Homer + Pi-hole
       ├── [Pi4 #1] (192.168.8.20)
-      ├── [Pi4 #2] (192.168.8.21)
-      └── [Pi3] (192.168.8.22)
+      └── [Pi4 #2] (192.168.8.21)
 
 [Workstation] Connecting over VPN
 ```

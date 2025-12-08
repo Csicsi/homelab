@@ -1,26 +1,4 @@
 ---
-# Deploy Monitoring Stack (Prometheus, Loki, Grafana) to k3s cluster
-# and Node Exporters to monitored hosts
-#
-# Usage:
-#   Deploy monitoring stack only (no sudo needed):
-#     ansible-playbook -i inventory.yml playbooks/setup_monitoring_stack.yml --limit pi4-node1
-#
-#   Deploy node exporters to Pis (same sudo password as control machine):
-#     ansible-playbook -i inventory.yml playbooks/setup_monitoring_stack.yml --tags node-exporter --limit pis -K
-#
-#   Deploy node exporter to homelab-main (different sudo password):
-#     ansible-playbook -i inventory.yml playbooks/setup_monitoring_stack.yml --tags node-exporter --limit homelab-main -K
-#
-#   Full deployment (Pis only, requires sudo password):
-#     ansible-playbook -i inventory.yml playbooks/setup_monitoring_stack.yml --limit "pi4-node1:pis" -K
-#
-# Notes:
-#   - Separate the Pi and server deployments if they have different sudo passwords
-#   - Router monitoring requires separate setup (OpenWrt collectd or custom exporter)
-#   - homelab-staging is optional (skipped if offline)
-#   - The monitoring stack is deployed to pi4-node1 (k3s control plane)
-
 - name: Deploy Monitoring Stack to k3s
   hosts: pi4-node1
   become: false
@@ -406,7 +384,7 @@
       when: ansible_os_family == "RedHat"
       tags: node-exporter
 
-    - name: Open node exporter port in firewall (Raspberry Pi)
+    - name: Open node exporter port in firewall (Ubuntu/Debian)
       community.general.ufw:
         rule: allow
         port: "9100"
@@ -480,11 +458,9 @@
         daemon_reload: true
       tags: node-exporter
 
-    - name: Open node exporter port in firewall (Rocky Linux)
-      ansible.posix.firewalld:
-        port: 9100/tcp
-        permanent: true
-        immediate: true
-        state: enabled
-      when: ansible_os_family == "RedHat"
+    - name: Open node exporter port in firewall (Ubuntu)
+      community.general.ufw:
+        rule: allow
+        port: "9100"
+        proto: tcp
       tags: node-exporter

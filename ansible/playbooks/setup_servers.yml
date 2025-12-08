@@ -86,6 +86,19 @@
         mode: "0666"
       tags: docker
 
+    - name: Allow members of the docker group to run the docker binary without a password
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/docker
+        content: "%docker ALL=(ALL) NOPASSWD: /usr/bin/docker\n"
+        mode: "0440"
+      tags: docker
+
+    - name: Validate docker sudoers file
+      ansible.builtin.command:
+        cmd: visudo -cf /etc/sudoers.d/docker
+      tags: docker
+      changed_when: false
+
     # ---------------------------------------------------------------
     # Firewall
     # ---------------------------------------------------------------

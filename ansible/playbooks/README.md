@@ -354,74 +354,107 @@ ansible-playbook -i inventory.yml playbooks/setup_main_server_jenkins.yml --ask-
 
 ---
 
-### `setup_management_node.yml` ⭐
+## Management Node Service Playbooks
 
-**Target**: `homelab-mgmt` (MiniPC at 192.168.8.12)
+### `setup_jenkins.yml`
 
-**Purpose**: Complete management node setup with CI/CD, container registry, and orchestration tools
+**Target**: `homelab-mgmt` (192.168.8.12)
+
+**Purpose**: Deploy Jenkins CI/CD server
 
 **What it does**:
 
-- Installs Docker and Docker Compose
-- Deploys **Jenkins** (CI/CD server) with Docker-in-Docker support
-  - Exposed on ports 8080 (web) and 50000 (agent communication)
-  - Mounts Docker socket for pipeline builds
-  - Persistent storage in `/srv/jenkins`
-- Deploys **Portainer** (Docker management UI)
-  - Exposed on ports 9000 (HTTP) and 9443 (HTTPS)
-  - Persistent storage in `/srv/portainer`
-- Deploys **Docker Registry** (private container registry)
-  - Exposed on port 5000
-  - Persistent storage in `/srv/registry`
-- Configures UFW firewall for all service ports
-- Displays initial credentials and access URLs
-
-**Prerequisites**:
-
-- Ubuntu Server 24.04 LTS installed on MiniPC
-- SSH keys deployed: `ssh-copy-id -i ~/.ssh/id_ed25519.pub dcsicsak@192.168.8.12`
-- Static DHCP reservation for 192.168.8.12 configured on router
-- Ansible `community.docker` collection installed on control node
-- Internet connection for package/image downloads
+- Creates Jenkins data directory in `/srv/jenkins`
+- Deploys Jenkins container with Docker-in-Docker support
+- Configures ports 9080 (web) and 50000 (agents)
+- Opens firewall ports
+- Displays initial admin password
 
 **Usage**:
 
 ```bash
-# Test connectivity
-ansible -i inventory.yml homelab-mgmt -m ping
-
-# Run complete setup
-ansible-playbook -i inventory.yml playbooks/setup_management_node.yml --ask-become-pass
-
-# Run specific services only
-ansible-playbook -i inventory.yml playbooks/setup_management_node.yml --tags jenkins --ask-become-pass
-ansible-playbook -i inventory.yml playbooks/setup_management_node.yml --tags portainer --ask-become-pass
-ansible-playbook -i inventory.yml playbooks/setup_management_node.yml --tags registry --ask-become-pass
+ansible-playbook -i inventory.yml playbooks/setup_jenkins.yml --ask-become-pass
 ```
 
-**Tags**: `packages`, `docker`, `jenkins`, `portainer`, `registry`, `firewall`
+**Access**: http://192.168.8.12:9080/jenkins
 
-**Post-setup**:
-**Post-setup**:
+---
 
-- **Jenkins:** Access at `http://192.168.8.12:8080/jenkins` (initial password displayed in playbook output)
-- **Portainer:** Create admin password at `https://192.168.8.12:9443`
-- **Docker Registry:** Use with `docker tag myimage 192.168.8.12:5000/myimage && docker push 192.168.8.12:5000/myimage`
-- Log out and back in for docker group changes: `newgrp docker`
+### `setup_portainer.yml`
 
-**Service Ports**:
+**Target**: `homelab-mgmt` (192.168.8.12)
 
-| Service         | Port(s)     | Purpose                  |
-| --------------- | ----------- | ------------------------ |
-| Jenkins         | 8080, 50000 | CI/CD web + agent comm   |
-| Portainer       | 9000, 9443  | Container management     |
-| Docker Registry | 5000        | Private image repository |
+**Purpose**: Deploy Portainer container management UI
 
-**Notes**:
+**What it does**:
 
-- Jenkins web UI will be available at `http://<server-ip>:9080`
-- Persistent data stored in `/srv/jenkins` on host
-- For initial admin password, check `/srv/jenkins/secrets/initialAdminPassword` inside the container
+- Creates Portainer data directory in `/srv/portainer`
+- Deploys Portainer CE container
+- Configures ports 9000 (HTTP) and 9443 (HTTPS)
+- Opens firewall ports
+
+**Usage**:
+
+```bash
+ansible-playbook -i inventory.yml playbooks/setup_portainer.yml --ask-become-pass
+```
+
+**Access**: https://192.168.8.12:9443 (create admin password on first login)
+
+---
+
+### `setup_homer.yml`
+
+**Target**: `homelab-mgmt` (192.168.8.12)
+
+**Purpose**: Deploy Homer dashboard with service links
+
+**What it does**:
+
+- Creates Homer configuration with all homelab services
+- Deploys Homer container on port 8081
+- Configures firewall
+- Provides unified dashboard for all services
+
+**Usage**:
+
+```bash
+ansible-playbook -i inventory.yml playbooks/setup_homer.yml --ask-become-pass
+```
+
+**Access**: http://192.168.8.12:8081
+
+---
+
+### `setup_pihole.yml`
+
+**Target**: `homelab-mgmt` (192.168.8.12)
+
+**Purpose**: Deploy Pi-hole DNS server and ad blocker
+
+**What it does**:
+
+- Creates Pi-hole directories in `/opt/pihole`
+- Deploys Pi-hole container
+- Stops systemd-resolved (conflicts with DNS)
+- Configures DNS ports and firewall
+- Sets up upstream DNS servers
+
+**Variables** (edit in playbook):
+
+- `pihole_webpassword`: Admin password (default: "admin")
+- `pihole_timezone`: Timezone (default: "Europe/Vienna")
+- `pihole_dns1/dns2`: Upstream DNS servers (default: Cloudflare)
+
+**Usage**:
+
+```bash
+ansible-playbook -i inventory.yml playbooks/setup_pihole.yml --ask-become-pass
+```
+
+**Access**: http://192.168.8.12:8080/admin
+
+**Post-setup**: Update router DNS to 192.168.8.12 for network-wide ad blocking
 
 ---
 
@@ -514,9 +547,9 @@ ansible-playbook -i inventory.yml playbooks/setup_monitoring_stack.yml --ask-bec
 
 ### `setup_pihole.yml`
 
-**Target**: `pi3-utils` (192.168.8.22)
+**Target**: `homelab-mgmt` (192.168.8.12)
 
-**Purpose**: Deploy Pi-hole DNS ad blocker via Docker Compose on Pi3
+**Purpose**: Deploy Pi-hole DNS ad blocker via Docker Compose on Management Node
 
 **What it does**:
 
@@ -546,7 +579,7 @@ ansible-playbook -i inventory.yml playbooks/setup_pihole.yml --ask-become-pass
 
 **Access**:
 
-- Web interface: http://192.168.8.22:8080/admin
+- Web interface: http://192.168.8.12:8080/admin
 - Default password: `admin` (change this!)
 
 **Post-setup**:
@@ -555,7 +588,7 @@ Configure GL.iNet router to use Pi-hole as DNS:
 
 ```bash
 # On router via Ansible or manually
-uci set dhcp.lan.dhcp_option='6,192.168.8.22'
+uci set dhcp.lan.dhcp_option='6,192.168.8.12'
 uci commit dhcp
 /etc/init.d/dnsmasq restart
 ```

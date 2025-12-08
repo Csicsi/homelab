@@ -1,10 +1,11 @@
 ---
-- name: Setup Homer Dashboard on Pi3
-  hosts: pi3-utils
+- name: Setup Homer Dashboard
+  hosts: homelab-mgmt
   become: true
 
   vars:
     homer_port: 8081
+    homer_home: /opt/homer
 
   tasks:
     - name: Create homer directories
@@ -13,9 +14,8 @@
         state: directory
         mode: "0755"
       loop:
-        - /opt/homer
-        - /opt/homer/assets
-      tags: setup
+        - "{{ homer_home }}"
+        - "{{ homer_home }}/assets"
 
     - name: Create Homer configuration
       ansible.builtin.copy:
@@ -25,7 +25,7 @@
           subtitle: "Infrastructure Services"
           logo: "assets/logo.png"
           header: true
-          footer: '<p>Homelab Infrastructure - Last updated: 2025-12-05</p>'
+          footer: '<p>Homelab Infrastructure - Last updated: 2025-12-08</p>'
 
           theme: default
           colors:
@@ -68,15 +68,21 @@
               items:
                 - name: "Jenkins"
                   logo: "https://www.jenkins.io/images/logos/jenkins/jenkins.svg"
-                  subtitle: "Build & Deploy"
-                  tag: "server"
-                  url: "http://192.168.8.10:9080"
+                  subtitle: "CI/CD Automation"
+                  tag: "mgmt"
+                  url: "http://192.168.8.12:9080/jenkins"
                   target: "_blank"
                 - name: "Portfolio Site"
                   icon: "fas fa-globe"
                   subtitle: "Production Website"
                   tag: "server"
                   url: "http://192.168.8.10"
+                  target: "_blank"
+                - name: "Portainer"
+                  icon: "fas fa-box-open"
+                  subtitle: "Container Management"
+                  tag: "mgmt"
+                  url: "https://192.168.8.12:9443"
                   target: "_blank"
 
             - name: "Monitoring & Observability"
@@ -89,7 +95,7 @@
                   url: "http://192.168.8.21:30030"
                   target: "_blank"
                 - name: "Prometheus"
-                  logo: "https://prometheus.io/assets/prometheus_logo_grey.svg"
+                  icon: "fas fa-chart-bar"
                   subtitle: "Metrics Collection"
                   tag: "k3s"
                   url: "http://192.168.8.21:30090"
@@ -101,11 +107,11 @@
                 - name: "Pi-hole"
                   logo: "https://wp-cdn.pi-hole.net/wp-content/uploads/2016/12/Vortex-R.png"
                   subtitle: "DNS & Ad Blocking"
-                  tag: "pi3"
-                  url: "http://192.168.8.22:8080/admin"
+                  tag: "mgmt"
+                  url: "http://192.168.8.12:8080/admin"
                   target: "_blank"
                 - name: "GL.iNet Router"
-                  icon: "fas fa-router"
+                  icon: "fas fa-ethernet"
                   subtitle: "Network Management"
                   tag: "router"
                   url: "http://192.168.8.1"
@@ -117,26 +123,25 @@
                 - name: "homelab-main"
                   icon: "fas fa-laptop"
                   subtitle: "x86 Server (192.168.8.10)"
-                  tag: "rocky-linux"
-                  type: "info"
+                  tag: "main"
+                - name: "homelab-staging"
+                  icon: "fas fa-laptop"
+                  subtitle: "Staging Server (192.168.8.11)"
+                  tag: "staging"
+                - name: "homelab-mgmt"
+                  icon: "fas fa-desktop"
+                  subtitle: "Management Node (192.168.8.12)"
+                  tag: "mgmt"
                 - name: "pi4-node1"
                   icon: "fab fa-raspberry-pi"
                   subtitle: "k3s Server (192.168.8.20)"
                   tag: "k3s-server"
-                  type: "info"
                 - name: "pi4-node2"
                   icon: "fab fa-raspberry-pi"
                   subtitle: "k3s Agent (192.168.8.21)"
                   tag: "k3s-agent"
-                  type: "info"
-                - name: "pi3-utils"
-                  icon: "fab fa-raspberry-pi"
-                  subtitle: "Pi-hole & Dashboard (192.168.8.22)"
-                  tag: "pi3"
-                  type: "info"
-        dest: /opt/homer/assets/config.yml
+        dest: "{{ homer_home }}/assets/config.yml"
         mode: "0644"
-      tags: config
 
     - name: Create docker-compose.yml for Homer
       ansible.builtin.copy:
@@ -148,45 +153,37 @@
               ports:
                 - "{{ homer_port }}:8080"
               volumes:
-                - /opt/homer/assets:/www/assets
+                - {{ homer_home }}/assets:/www/assets
               environment:
                 - INIT_ASSETS=0
               restart: unless-stopped
-        dest: /opt/homer/docker-compose.yml
+        dest: "{{ homer_home }}/docker-compose.yml"
         mode: "0644"
-      tags: setup
 
     - name: Start Homer dashboard
       ansible.builtin.shell:
         cmd: docker compose up -d
-        chdir: /opt/homer
-      tags: start
+        chdir: "{{ homer_home }}"
 
     - name: Wait for Homer to be ready
       ansible.builtin.wait_for:
         port: "{{ homer_port }}"
         delay: 5
         timeout: 60
-      tags: verify
 
     - name: Open Homer port in firewall
       community.general.ufw:
         rule: allow
         port: "{{ homer_port }}"
         proto: tcp
-      tags: firewall
 
     - name: Display Homer access information
       ansible.builtin.debug:
         msg:
-          - "Homer Dashboard deployed successfully!"
-          - "Access URL: http://192.168.8.22:{{ homer_port }}"
+          - "=========================================="
+          - "Homer Dashboard Setup Complete!"
+          - "=========================================="
+          - "URL: http://{{ ansible_host }}:{{ homer_port }}"
           - ""
-          - "The dashboard includes:"
-          - "- Jenkins (CI/CD)"
-          - "- Portfolio Site"
-          - "- Grafana & Prometheus (Monitoring)"
-          - "- Pi-hole (DNS)"
-          - "- Router Admin"
-          - "- Infrastructure Overview"
-      tags: verify
+          - "Configuration: {{ homer_home }}/assets/config.yml"
+          - "=========================================="

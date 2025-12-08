@@ -4,12 +4,13 @@
 
 | Service             | URL                              | Credentials      | Status         |
 | ------------------- | -------------------------------- | ---------------- | -------------- |
-| **Homer Dashboard** | **http://192.168.8.22:8081**     | **N/A**          | **✅ Running** |
-| Jenkins             | http://192.168.8.10:9080         | admin/configured | ✅ Running     |
+| **Homer Dashboard** | **http://192.168.8.12:8081**     | **N/A**          | **✅ Running** |
+| Jenkins             | http://192.168.8.12:9080/jenkins | admin/configured | ✅ Running     |
 | Portfolio Site      | http://192.168.8.10 (HTTP/HTTPS) | N/A              | ✅ Running     |
-| Pi-hole Admin       | http://192.168.8.22:8080/admin   | admin/admin      | ✅ Running     |
-| Prometheus          | http://192.168.8.20:30090        | N/A              | ✅ Running     |
-| Grafana             | http://192.168.8.20:30030        | admin/admin      | ✅ Running     |
+| Pi-hole Admin       | http://192.168.8.12:8080/admin   | admin/admin      | ✅ Running     |
+| Portainer           | https://192.168.8.12:9443        | admin/configured | ✅ Running     |
+| Prometheus          | http://192.168.8.21:30090        | N/A              | ✅ Running     |
+| Grafana             | http://192.168.8.21:30030        | admin/admin      | ✅ Running     |
 | GL.iNet Router      | http://192.168.8.1               | root/configured  | ✅ Running     |
 
 ---
@@ -20,14 +21,18 @@
 
 **Docker Containers:**
 
-- **Jenkins** (jenkins/jenkins:lts)
+- **Jenkins** (jenkins/jenkins:lts) - ⚠️ TEMPORARY
   - Port: 9080 (HTTP)
   - Purpose: CI/CD automation, build pipelines
-  - Uptime: 6 days
+  - Status: Running (will be removed)
 - **Portfolio Site** (portfolio-portfolio)
   - Ports: 80 (HTTP), 443 (HTTPS)
   - Purpose: Personal portfolio/website
-  - Uptime: 5 hours
+  - Status: Running
+- **Minishell API** (portfolio-minishell-api)
+  - Port: 3000 (internal)
+  - Purpose: API backend for portfolio
+  - Status: Running
 
 **System Services:**
 
@@ -78,7 +83,7 @@
 
 ---
 
-### pi3-utils (192.168.8.22) - Raspberry Pi 3B+
+### homelab-mgmt (192.168.8.12) - MiniPC Management Node
 
 **Docker Containers:**
 
@@ -86,14 +91,51 @@
 
   - Port: 8081 (HTTP)
   - Purpose: Unified dashboard for all homelab services
-  - Status: Healthy
+  - Status: Running
   - Features: Quick links to all services, infrastructure overview
 
 - **Pi-hole** (pihole/pihole:latest)
+
   - Ports: 53 (DNS TCP/UDP), 8080 (Web UI)
   - Purpose: Network-wide DNS filtering and ad blocking
-  - Status: Healthy
-  - Uptime: ~35 minutes
+  - Status: Running
+
+- **Jenkins** (jenkins/jenkins:lts)
+
+  - Ports: 9080 (HTTP), 50000 (agent)
+  - Purpose: CI/CD automation, management node builds
+  - Status: Running
+
+- **Portainer** (portainer/portainer-ce:latest)
+
+  - Ports: 9000 (HTTP), 9443 (HTTPS)
+  - Purpose: Docker container management
+  - Status: Running
+
+**System Services:**
+
+- Docker Engine
+- Node Exporter (port 9100) - metrics for Prometheus
+- SSH (port 22)
+
+---
+
+### homelab-staging (192.168.8.11) - Staging Server
+
+**Docker Containers:**
+
+- No containers currently running
+
+**System Services:**
+
+- Docker Engine
+- SSH (port 22)
+
+---
+
+### pi3-utils (192.168.8.22) - Raspberry Pi 3B+ (Deprecated)
+
+**Status:** Services migrated to homelab-mgmt
 
 **System Services:**
 
@@ -149,35 +191,48 @@ All hosts report metrics to Prometheus via Node Exporter:
 
 **Infrastructure:**
 
-- DNS: Pi-hole on 192.168.8.22:53
+- DNS: Pi-hole on 192.168.8.12:53
 - VPN: WireGuard on router (port 51820)
 - DHCP: Router (192.168.8.1)
 - Metrics: Prometheus scraping node exporters
 - Logs: Loki on k3s cluster
+- Container Registry: 192.168.8.12:5000
 
 **Orchestration:**
 
 - k3s: 2-node cluster (pi4-node1 + pi4-node2)
-- Docker: homelab-main, pi3-utils
-- Docker Compose: Pi-hole
+  - Access: `export KUBECONFIG=~/.kube/k3s-config && kubectl get pods -A`
+  - Running: Prometheus, Grafana, Loki, CoreDNS, Metrics Server
+- Docker: homelab-main, homelab-mgmt, homelab-staging
+- Docker Compose: Pi-hole, Homer
 
 ---
 
 ## Next Steps / TODO
 
-- [ ] Configure router DNS to point to Pi-hole (192.168.8.22)
-- [ ] Install Node Exporter on pi3-utils for monitoring
-- [ ] Add router metrics to Prometheus (if supported)
+- [ ] Configure router DNS to point to Pi-hole (192.168.8.12)
 - [ ] Change Pi-hole admin password from default
 - [ ] Create Grafana dashboards for homelab metrics
 - [ ] Document Jenkins pipeline configurations
 - [ ] Set up automated backups for persistent volumes
+- [ ] Investigate NotReady k3s node (raspberrypi)
+- [ ] Consider decommissioning pi3-utils (services migrated)
+- [ ] Configure Portainer to manage k3s cluster
+- [ ] Set up kubectl access for all team members
 
 ---
 
 ## Maintenance Notes
 
-**Last Updated:** 2025-12-05
+**Last Updated:** 2025-12-08
+
+**Recent Changes:**
+
+- Homer and Pi-hole migrated from pi3-utils to homelab-mgmt
+- kubectl configured locally with access to k3s cluster
+- Portainer and Docker Registry deployed on homelab-mgmt
+- K3s cluster running: Prometheus, Grafana, Loki
+- Added kubectl configuration: `export KUBECONFIG=~/.kube/k3s-config`
 
 **Recent Changes:**
 
