@@ -1,65 +1,50 @@
-# Populating Prometheus, Grafana, and Pi-hole
+# Populating Prometheus, Grafana, and Notifications
 
 ## Overview
 
-Your monitoring stack is running but needs configuration to be useful. This guide walks through populating each service with real data and dashboards.
+This guide assumes a simplified monitoring layout:
+
+- Prometheus, Grafana, and Uptime Kuma run on the laptop
+- The optional Pi acts as an independent watcher or secondary notifier
+- Pi-hole is optional and should only be configured if you actually keep it in the stack
 
 ---
 
 ## 1. Prometheus Configuration
 
-### Current Status
+### Current Target State
 
-✅ Prometheus is running and scraping node exporters from all hosts (15s interval)
+Prometheus should scrape at least:
+
+- `homelab-laptop` on `192.168.8.10:9100`
+- `monitoring-pi` on `192.168.8.20:9100` when enabled
 
 ### What to Check
 
-1. **Verify metrics are being collected:**
+1. Open Prometheus:
 
    ```
-   Visit: http://192.168.8.20:30090
+   http://192.168.8.10:30090
    ```
 
-2. **Access the query interface:**
+2. Verify basic queries:
+   - `up`
+   - `node_cpu_seconds_total`
+   - `node_memory_MemAvailable_bytes`
+   - `node_filesystem_avail_bytes`
 
-   - Click "Graph" tab
-   - In the expression field, try these queries to verify data collection:
-     - `up` - Shows scrape status of all targets (1 = up, 0 = down)
-     - `node_cpu_seconds_total` - CPU metrics from node exporters
-     - `node_memory_MemFree_bytes` - Memory free on each host
-     - `node_disk_io_time_seconds_total` - Disk I/O metrics
-     - `rate(node_cpu_seconds_total[5m])` - CPU usage over 5 minutes
+3. Check targets under **Status → Targets** and confirm the laptop is always present.
 
-3. **Check current targets:**
-   - Click "Status" → "Targets"
-   - You should see node exporters from:
-     - pi4-node1 (192.168.8.20:9100)
-     - pi4-node2 (192.168.8.21:9100)
-     - homelab-main (192.168.8.10:9100)
-     - pi3-utils (192.168.8.22:9100)
+### Recommended Scrape Targets
 
-### Configuration Issues to Fix
-
-1. **Missing node exporter on pi3-utils:**
-
-   - Check if `pi3-utils` is scraping at port 9100
-   - If not, run: `ansible-playbook -i inventory.yml playbooks/setup_monitoring_stack.yml --tags node-exporter --limit pi3-utils -K`
-
-2. **Router metrics (optional but useful):**
-
-   - GL.iNet router (192.168.8.1) is not currently exposed to Prometheus
-   - Would require installing node_exporter on OpenWrt or using collectd
-   - Skip for now; add later if needed
-
-3. **Update Prometheus config to add more scrape targets (optional):**
-   - Jenkins metrics: Add `- targets: ['192.168.8.10:8080']` (if Jenkins exposes metrics)
-   - Custom applications as they're added
+- Node Exporter on the laptop
+- Node Exporter on the Pi
+- Optional application metrics if a service exposes them
 
 ### Retention and Performance
 
-- Current: 7-day retention, 15-second scrape interval
-- This is good for a homelab; adjust if storage becomes an issue
-- To modify, edit the Prometheus ConfigMap in `setup_monitoring_stack.yml`
+- Keep a short retention window at first, such as 7 days
+- Increase only if the data is genuinely useful
 
 ---
 
@@ -67,200 +52,100 @@ Your monitoring stack is running but needs configuration to be useful. This guid
 
 ### Initial Login
 
-- URL: http://192.168.8.20:30030
-- Default credentials: `admin` / `admin`
-- **⚠️ Change password on first login**
+- URL: `http://192.168.8.10:30030`
+- Change the default admin password immediately
 
-### Step 1: Verify Data Sources
+### Essential Dashboards
 
-1. **Log in and go to:**
+Start with only a few dashboards:
 
-   - Settings (⚙️) → Data Sources
+1. **Host Overview**
+   - CPU usage
+   - Memory usage
+   - Disk usage
+   - Uptime
 
-2. **Verify existing sources:**
+2. **Per-Host Detail**
+   - Filter by host label
+   - Show CPU, memory, disk, and network trends
 
-   - ✅ Prometheus (http://prometheus.monitoring.svc.cluster.local:9090)
-   - ✅ Loki (http://loki.monitoring.svc.cluster.local:3100)
+3. **Service Health**
+   - Combine Prometheus metrics with links to Uptime Kuma
 
-3. **Test connections:**
-   - Click each data source
-   - Click "Test" button - should show "Data source is working"
+### Alert Rules to Add First
 
-### Step 2: Create Essential Dashboards
+- CPU above 80% for 5 minutes
+- Memory above 85%
+- Disk usage above 90%
+- `up == 0` for the laptop or Pi exporters
 
-#### Dashboard 1: System Overview (CPU, Memory, Disk)
+### Notification Channels
 
-1. **Create new dashboard:**
+Connect Grafana to one of:
 
-   - Click + → Dashboard
-
-2. **Add panels with these queries:**
-
-   **Panel 1: CPU Usage (all hosts)**
-
-   ```
-   Name: "CPU Usage %"
-   Query (Prometheus):
-   100 * (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) by (instance))
-   Visualization: Graph
-   ```
-
-   **Panel 2: Memory Usage (all hosts)**
-
-   ```
-   Name: "Memory Used %"
-   Query:
-   100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))
-   Visualization: Gauge
-   ```
-
-   **Panel 3: Disk Usage (all hosts)**
-
-   ```
-   Name: "Disk Usage %"
-   Query:
-   100 * (1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs|vfat"} / node_filesystem_size_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs|vfat"}))
-   Visualization: Table (convert to table format)
-   ```
-
-   **Panel 4: System Uptime**
-
-   ```
-   Name: "Uptime (hours)"
-   Query:
-   node_boot_time_seconds
-   Transformation: Convert field type (timestamp → time since now)
-   ```
-
-3. **Save dashboard:** Give it a name like "System Overview"
-
-#### Dashboard 2: Per-Host Details
-
-1. **Create new dashboard**
-2. **Add variable for host selection:**
-
-   - Settings → Variables → New Variable
-   - Name: `host`
-   - Query: `label_values(up, instance)`
-   - Make it multi-select
-
-3. **Add panels filtered by $host variable:**
-
-   **CPU per core:**
-
-   ```
-   Query: rate(node_cpu_seconds_total{instance="$host",mode="system"}[5m])
-   Legend: {{ cpu }}
-   ```
-
-   **Memory trend:**
-
-   ```
-   Query: node_memory_MemFree_bytes{instance="$host"}
-   ```
-
-   **Disk I/O:**
-
-   ```
-   Query: rate(node_disk_io_time_seconds_total{instance="$host"}[5m])
-   ```
-
-#### Dashboard 3: Network Monitoring (if metrics available)
-
-```
-Panel: "Network I/O"
-Query: rate(node_network_receive_bytes_total{instance="$host",device!~"lo"}[5m])
-```
-
-### Step 3: Set Up Alerts (Optional for now)
-
-1. **Go to:** Alerting → Alert rules
-2. **Create a simple alert:**
-   - CPU > 80% for 5 minutes
-   - Memory > 85%
-3. **Configure notification channel:** (Slack, email, etc.)
-
-### Step 4: Configure Home Dashboard
-
-1. **Settings** → **Home**
-2. **Add starred dashboards** for quick access
-3. **Set default home dashboard** to your "System Overview"
+- ntfy
+- Email
+- Telegram
+- Discord webhook
 
 ---
 
-## 3. Pi-hole Configuration
+## 3. Uptime Kuma Setup
 
-### Initial Login
+### Why Use It
 
-- URL: http://192.168.8.12:8080/admin
-- Default password: `admin` (you set this in the playbook)
-- **⚠️ Change password immediately**
+Uptime Kuma is the easiest way to get immediate service-down alerts without building everything around Prometheus rules.
 
-### Step 1: Basic Configuration
+### Suggested Monitors
 
-#### Settings → General
+- Ping: `192.168.8.1` for the router
+- Ping: `192.168.8.10` for the laptop
+- HTTP: Homer on `http://192.168.8.10:8081`
+- HTTP: Grafana on `http://192.168.8.10:30030`
+- HTTP: Prometheus on `http://192.168.8.10:30090`
+- Optional HTTP or TCP checks for any app stack you care about
 
-- **DNS upstream servers:**
+### Redundancy Option
 
-  - Primary: 1.1.1.1 (Cloudflare)
-  - Secondary: 1.0.0.1 (Cloudflare)
-  - ✅ Already set in playbook
+If the Pi stays online, run a second Uptime Kuma instance there and have it check the laptop. That way the monitor is still alive if the main host is down.
 
-- **DNS records for local hosts (optional):**
-  - Go to Settings → Local DNS Records
-  - Add entries for your homelab hosts:
-    ```
-    homelab-main.local    → 192.168.8.10
-    pi4-node1.local       → 192.168.8.20
-    pi4-node2.local       → 192.168.8.21
-    homelab-mgmt.local    → 192.168.8.12
-    grafana.local         → 192.168.8.20
-    prometheus.local      → 192.168.8.20
-    jenkins.local         → 192.168.8.10
-    ```
+---
 
-### Step 2: Add Blocklists
+## 4. Pi-hole Configuration (Optional)
 
-1. **Go to:** Adlists (or Adlist)
+Only do this if Pi-hole remains part of your final design.
 
-2. **Add common blocklists:**
+### Suggested DNS Records
 
-   | List Name             | URL                                                                         |
-   | --------------------- | --------------------------------------------------------------------------- |
-   | Steven Black          | `https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts`          |
-   | Firebog - Suspicious  | `https://raw.githubusercontent.com/firebogdan/hosts/master/suspicious.txt`  |
-   | Firebog - Advertising | `https://raw.githubusercontent.com/firebogdan/hosts/master/advertising.txt` |
-   | Firebog - Tracking    | `https://raw.githubusercontent.com/firebogdan/hosts/master/tracking.txt`    |
-   | Firebog - Malware     | `https://raw.githubusercontent.com/firebogdan/hosts/master/malware.txt`     |
-   | Pi-hole Regex         | `https://raw.githubusercontent.com/mmotti/pihole-regex/master/regex.list`   |
+```text
+homelab-laptop.local  → 192.168.8.10
+monitoring-pi.local   → 192.168.8.20
+grafana.local         → 192.168.8.10
+prometheus.local      → 192.168.8.10
+uptime.local          → 192.168.8.10
+```
 
-3. **Update gravity database:**
-   - After adding lists, gravity updates automatically
-   - Check Settings → Gravity to see blocklist stats
+### Router DNS Recommendation
 
-### Step 3: Configure DHCP
+- If Pi-hole runs on the laptop, point router DNS to `192.168.8.10`
+- If Pi-hole runs on the Pi, point router DNS to `192.168.8.20`
+- Keep a fallback public resolver only if needed
 
-1. **Settings → DHCP Server**
+---
 
-2. **Enable DHCP server on Pi-hole:**
+## 5. Minimal Useful Setup
 
-   - Toggle "DHCP server enabled"
-   - This allows Pi-hole to serve DHCP to your network
-   - Useful for ensuring all devices use Pi-hole as DNS
+If you want the smallest setup that still notifies you:
 
-3. **Alternative: Configure router DHCP to use Pi-hole as DNS**
-   - On GL.iNet router (192.168.8.1):
-     - Network → LAN → DHCP Server
-     - Set DNS 1: 192.168.8.12
-     - Set DNS 2: 8.8.8.8 (backup)
-   - This makes all devices use Pi-hole DNS automatically
+1. Run Node Exporter on the laptop
+2. Run Prometheus and Grafana on the laptop
+3. Run Uptime Kuma on the laptop
+4. Connect Uptime Kuma to ntfy, Telegram, or Discord
+5. Optionally run a second Uptime Kuma on the Pi
 
-### Step 4: Query Logging and Analytics
-
-1. **Go to:** Settings → Query Logging
+That gets you from dashboards-only to real notifications with very little overhead.
 
 2. **Enable query logging:**
-
    - Shows real-time DNS queries
    - Useful for debugging and monitoring
 
@@ -274,12 +159,10 @@ Query: rate(node_network_receive_bytes_total{instance="$host",device!~"lo"}[5m])
 ### Step 5: Whitelisting and Blacklisting
 
 1. **Whitelist domains** (Settings → Whitelist):
-
    - Domains that should never be blocked
    - Example: `github.com` if GitHub CDN is mistakenly blocked
 
 2. **Blacklist domains** (Settings → Blacklist):
-
    - Domains to always block
    - Example: specific tracking domains
 
@@ -296,7 +179,6 @@ Query: rate(node_network_receive_bytes_total{instance="$host",device!~"lo"}[5m])
 ### Step 7: Monitor Pi-hole from Grafana (Optional)
 
 1. **Export Pi-hole metrics to Prometheus:**
-
    - Install Pi-hole exporter (requires additional setup)
    - Or query Pi-hole API directly in Grafana
 
@@ -323,7 +205,6 @@ Query: rate(node_network_receive_bytes_total{instance="$host",device!~"lo"}[5m])
    ```
 
 2. **Add to Prometheus config:**
-
    - Edit ConfigMap in `setup_monitoring_stack.yml`
    - Add scrape job:
      ```yaml
@@ -341,7 +222,6 @@ Query: rate(node_network_receive_bytes_total{instance="$host",device!~"lo"}[5m])
 
 1. **In Grafana, create new dashboard:**
 2. **Add panels from all three sources:**
-
    - Prometheus: System metrics
    - Pi-hole exporter: DNS blocking stats
    - Logs from Loki (if available)
@@ -390,14 +270,12 @@ Query: rate(node_network_receive_bytes_total{instance="$host",device!~"lo"}[5m])
 ## 6. Next Steps
 
 1. **Immediate:**
-
    - ✅ Verify metrics in Prometheus
    - ✅ Create basic dashboards in Grafana
    - ✅ Configure Pi-hole blocklists
    - ✅ Change default passwords
 
 2. **Short-term (this week):**
-
    - Add Pi-hole metrics to Prometheus
    - Create unified monitoring dashboard
    - Set up Grafana alerts

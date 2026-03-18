@@ -1,6 +1,6 @@
 ---
 - name: Setup Portainer Container Management
-  hosts: homelab-mgmt
+  hosts: services_host
   become: true
 
   vars:

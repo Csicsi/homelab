@@ -1,6 +1,6 @@
 ---
 - name: Setup Jenkins CI/CD Server
-  hosts: homelab-mgmt
+  hosts: services_host
   become: true
 
   vars:

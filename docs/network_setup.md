@@ -2,17 +2,18 @@
 
 ## Overview
 
-**Goal**: Configure LTE modem → router → switch topology with static IP assignments for all homelab devices.
+**Goal**: Configure LTE modem → router → optional switch topology with static IP assignments for the main laptop and optional monitoring Pi.
 
 ## Hardware Chain
 
 ```
-[Internet/LTE] → [Netgear LM1200] → [GL.iNet SF1200] → [Netgear GS308EP Switch] → [Devices]
+[Internet/LTE] → [Netgear LM1200] → [GL.iNet SF1200] → [Homelab Laptop]
+                                              └→ [Optional Switch] → [Monitoring Pi]
 ```
 
 **Network**: `192.168.8.0/24`  
-**Router/Gateway**: `192.168.8.1` (GL.iNet default - no change needed)  
-**Infrastructure**: `192.168.8.2-99` (static IPs for servers, switch, Pis)  
+**Router/Gateway**: `192.168.8.1`  
+**Infrastructure**: `192.168.8.2-99` (switch, laptop, optional Pi)  
 **DHCP Pool**: `192.168.8.100-200` (guests, temporary devices)
 
 ## Setup Steps
@@ -65,7 +66,7 @@ cp vars/router_dhcp.yml.example vars/router_dhcp.yml
 vim vars/router_dhcp.yml
 ```
 
-Add real MAC addresses to the vars file.
+Add the real MAC addresses for the laptop and optional Pi to the vars file.
 
 Optional - set DuckDNS token for DDNS:
 
@@ -118,13 +119,10 @@ ansible-playbook -i inventory.yml playbooks/setup_glinet_complete.yml
 | Device | MAC Address | Reserved IP |
 |-------------------|---------------------|---------------|
 | Netgear GS308EP | (from switch label) | 192.168.8.2 |
-| ThinkPad T440 | (from `ip link`) | 192.168.8.10 |
-| Asus X550C | (from `ip link`) | 192.168.8.11 |
-| Raspberry Pi 4 #1 | (from `ip link`) | 192.168.8.20 |
-| Raspberry Pi 4 #2 | (from `ip link`) | 192.168.8.21 |
-| Raspberry Pi 3B+ | (from `ip link`) | 192.168.8.22 |
+| Homelab laptop | (from `ip link`) | 192.168.8.10 |
+| Monitoring Pi (optional) | (from `ip link`) | 192.168.8.20 |
 
-### 3. Netgear GS308EP Switch Setup
+### 3. Netgear GS308EP Switch Setup (Optional)
 
 1. Connect switch to router (any switch port → router LAN port)
 2. Power on switch
@@ -132,22 +130,21 @@ ansible-playbook -i inventory.yml playbooks/setup_glinet_complete.yml
 
 **PoE Configuration**:
 
-- Enable PoE on ports 4, 5, 6 (for Raspberry Pis with Evodata hats)
-- Set PoE priority if needed (High for critical Pis)
+- Enable PoE only on the port used by the monitoring Pi, if applicable
 
 **Port Assignment** (update `network_inventory.md`):
 
 - Port 1: Uplink to GL.iNet router
-- Port 2: ThinkPad T440
-- Port 3: Asus X550C
-- Port 4-6: Raspberry Pis (with PoE enabled)
+- Port 2: Homelab laptop
+- Port 3: Monitoring Pi (optional)
 
 ### 4. Connect Devices
 
-1. Connect servers and Pis to switch via Ethernet
-2. Boot each device
-3. Verify they receive correct static IPs from DHCP reservations
-4. Test connectivity:
+1. Connect the laptop directly to the router or via the switch
+2. Connect the monitoring Pi if you are keeping it
+3. Boot each device
+4. Verify they receive correct static IPs from DHCP reservations
+5. Test connectivity:
 
 ```bash
 ping 192.168.8.1

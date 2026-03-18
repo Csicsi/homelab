@@ -1,6 +1,6 @@
 ---
 - name: Setup Pi-hole DNS Server
-  hosts: homelab-mgmt
+  hosts: services_host
   become: true
 
   vars:

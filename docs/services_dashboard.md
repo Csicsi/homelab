@@ -2,250 +2,110 @@
 
 ## Quick Access URLs
 
-| Service             | URL                              | Credentials      | Status         |
-| ------------------- | -------------------------------- | ---------------- | -------------- |
-| **Homer Dashboard** | **http://192.168.8.12:8081**     | **N/A**          | **✅ Running** |
-| Jenkins             | http://192.168.8.12:9080/jenkins | admin/configured | ✅ Running     |
-| Portfolio Site      | http://192.168.8.10 (HTTP/HTTPS) | N/A              | ✅ Running     |
-| Pi-hole Admin       | http://192.168.8.12:8080/admin   | admin/admin      | ✅ Running     |
-| Portainer           | https://192.168.8.12:9443        | admin/configured | ✅ Running     |
-| Prometheus          | http://192.168.8.21:30090        | N/A              | ✅ Running     |
-| Grafana             | http://192.168.8.21:30030        | admin/admin      | ✅ Running     |
-| GL.iNet Router      | http://192.168.8.1               | root/configured  | ✅ Running     |
+| Service             | URL                              | Credentials      | Status            |
+| ------------------- | -------------------------------- | ---------------- | ----------------- |
+| **Homer Dashboard** | **http://192.168.8.10:8081**     | **N/A**          | **Primary entry** |
+| Jenkins             | http://192.168.8.10:9080/jenkins | admin/configured | Optional          |
+| Portfolio Site      | http://192.168.8.10              | N/A              | Optional          |
+| Pi-hole Admin       | http://192.168.8.10:8080/admin   | admin/configured | Optional          |
+| Portainer           | https://192.168.8.10:9443        | admin/configured | Optional          |
+| Prometheus          | http://192.168.8.10:30090        | N/A              | Recommended       |
+| Grafana             | http://192.168.8.10:30030        | admin/configured | Recommended       |
+| Uptime Kuma         | http://192.168.8.10:3001         | configured       | Recommended       |
+| GL.iNet Router      | http://192.168.8.1               | root/configured  | Required          |
 
 ---
 
-## Service Breakdown by Host
+## Runtime Layout
 
-### homelab-main (192.168.8.10) - x86 ThinkPad T440
+### homelab-laptop (192.168.8.10)
 
-**Docker Containers:**
+**Primary roles:**
 
-- **Jenkins** (jenkins/jenkins:lts) - ⚠️ TEMPORARY
-  - Port: 9080 (HTTP)
-  - Purpose: CI/CD automation, build pipelines
-  - Status: Running (will be removed)
-- **Portfolio Site** (portfolio-portfolio)
-  - Ports: 80 (HTTP), 443 (HTTPS)
-  - Purpose: Personal portfolio/website
-  - Status: Running
-- **Minishell API** (portfolio-minishell-api)
-  - Port: 3000 (internal)
-  - Purpose: API backend for portfolio
-  - Status: Running
+- Main Docker or Docker Compose host
+- Ansible control node
+- Optional local Kubernetes lab using `k3d` or `kind`
+- Main monitoring and alerting node
 
-**System Services:**
+**Typical services:**
 
-- Docker Engine
-- Node Exporter (port 9100) - metrics for Prometheus
-- SSH (port 22)
+- Homer
+- Portainer
+- Jenkins if still useful
+- Pi-hole if you want local DNS filtering here
+- Prometheus
+- Grafana
+- Uptime Kuma
+- Application stacks such as portfolio or experiments
 
----
+**Suggested stage separation:**
 
-### pi4-node1 (192.168.8.20) - k3s Server Node
-
-**k3s Workloads:**
-
-- **Prometheus** (NodePort 30090)
-
-  - Metrics collection and storage
-  - Scrapes all node exporters (15s interval)
-  - 7-day retention
-
-- **Grafana** (NodePort 30030)
-  - Visualization dashboards
-  - Pre-configured data sources: Prometheus, Loki
-- **Loki** (internal)
-  - Log aggregation
-  - Accessible via Grafana
-
-**System Services:**
-
-- k3s server (control plane)
-- Node Exporter (port 9100)
-- SSH (port 22)
+- `prod` Compose project for stable daily services
+- `staging` Compose project or VM for pre-production testing
+- `lab` namespace, VM, or local cluster for pod experiments
 
 ---
 
-### pi4-node2 (192.168.8.21) - k3s Agent Node
+### monitoring-pi (192.168.8.20, optional)
 
-**k3s Role:**
+**Primary roles:**
 
-- Worker node (agent)
-- Available for pod scheduling
-- Part of monitoring cluster
+- Independent watcher for laptop and router uptime
+- Backup notification path
+- Optional secondary DNS or small monitoring components
 
-**System Services:**
+**Recommended lightweight services:**
 
-- k3s agent
-- Node Exporter (port 9100)
-- SSH (port 22)
-
----
-
-### homelab-mgmt (192.168.8.12) - MiniPC Management Node
-
-**Docker Containers:**
-
-- **Homer Dashboard** (b4bz/homer:latest)
-
-  - Port: 8081 (HTTP)
-  - Purpose: Unified dashboard for all homelab services
-  - Status: Running
-  - Features: Quick links to all services, infrastructure overview
-
-- **Pi-hole** (pihole/pihole:latest)
-
-  - Ports: 53 (DNS TCP/UDP), 8080 (Web UI)
-  - Purpose: Network-wide DNS filtering and ad blocking
-  - Status: Running
-
-- **Jenkins** (jenkins/jenkins:lts)
-
-  - Ports: 9080 (HTTP), 50000 (agent)
-  - Purpose: CI/CD automation, management node builds
-  - Status: Running
-
-- **Portainer** (portainer/portainer-ce:latest)
-
-  - Ports: 9000 (HTTP), 9443 (HTTPS)
-  - Purpose: Docker container management
-  - Status: Running
-
-**System Services:**
-
-- Docker Engine
-- Node Exporter (port 9100) - metrics for Prometheus
-- SSH (port 22)
+- Uptime Kuma
+- Node Exporter
+- ntfy relay or webhook forwarder if desired
 
 ---
 
-### homelab-staging (192.168.8.11) - Staging Server
-
-**Docker Containers:**
-
-- No containers currently running
-
-**System Services:**
-
-- Docker Engine
-- SSH (port 22)
-
----
-
-### pi3-utils (192.168.8.22) - Raspberry Pi 3B+ (Deprecated)
-
-**Status:** Services migrated to homelab-mgmt
-
-**System Services:**
-
-- Docker Engine
-- SSH (port 22)
-
----
-
-### glinet-router (192.168.8.1) - GL.iNet SF1200
+### glinet-router (192.168.8.1)
 
 **Services:**
 
-- **WireGuard VPN Server**
-  - Port: 51820 (UDP)
-  - Purpose: Remote access to homelab
-- **DuckDNS DDNS**
-  - Purpose: Dynamic DNS for changing public IP
-- **DHCP Server**
-
-  - Static reservations for all hosts
-  - Range: 192.168.8.0/24
-
-- **OpenWrt UCI Management**
-  - Firewall (fw4)
-  - Network configuration
+- WireGuard VPN server
+- DHCP reservations
+- Optional DuckDNS DDNS
+- Firewall and LAN management
 
 ---
 
 ## Monitoring Coverage
 
-All hosts report metrics to Prometheus via Node Exporter:
+**Core targets:**
 
-- ✅ homelab-main (192.168.8.10:9100)
-- ✅ pi4-node1 (192.168.8.20:9100)
-- ✅ pi4-node2 (192.168.8.21:9100)
-- ❓ pi3-utils (192.168.8.22:9100) - needs verification
-- ❓ glinet-router (192.168.8.1) - router metrics not yet configured
+- ✅ homelab-laptop at `192.168.8.10:9100`
+- ✅ monitoring-pi at `192.168.8.20:9100` when enabled
+- ⚠️ GL.iNet router availability by ping or HTTP check
 
-**Web Applications:**
+**Recommended web apps:**
 
-- Homer Dashboard (port 8081) - **START HERE**
-- Portfolio site (port 80/443)
-- Jenkins (port 9080)
-- Pi-hole Admin (port 8080)
-- Grafana (port 30030)
-- Prometheus (port 30090)
-  **Web Applications:**
-- Portfolio site (port 80/443)
-- Jenkins (port 9080)
-- Pi-hole Admin (port 8080)
-- Grafana (port 30030)
-- Prometheus (port 30090)
-
-**Infrastructure:**
-
-- DNS: Pi-hole on 192.168.8.12:53
-- VPN: WireGuard on router (port 51820)
-- DHCP: Router (192.168.8.1)
-- Metrics: Prometheus scraping node exporters
-- Logs: Loki on k3s cluster
-- Container Registry: 192.168.8.12:5000
-
-**Orchestration:**
-
-- k3s: 2-node cluster (pi4-node1 + pi4-node2)
-  - Access: `export KUBECONFIG=~/.kube/k3s-config && kubectl get pods -A`
-  - Running: Prometheus, Grafana, Loki, CoreDNS, Metrics Server
-- Docker: homelab-main, homelab-mgmt, homelab-staging
-- Docker Compose: Pi-hole, Homer
+- Homer as the landing page
+- Grafana for dashboards and alert rules
+- Prometheus for metrics
+- Uptime Kuma for endpoint monitoring and notifications
 
 ---
 
-## Next Steps / TODO
+## Next Steps
 
-- [ ] Configure router DNS to point to Pi-hole (192.168.8.12)
-- [ ] Change Pi-hole admin password from default
-- [ ] Create Grafana dashboards for homelab metrics
-- [ ] Document Jenkins pipeline configurations
-- [ ] Set up automated backups for persistent volumes
-- [ ] Investigate NotReady k3s node (raspberrypi)
-- [ ] Consider decommissioning pi3-utils (services migrated)
-- [ ] Configure Portainer to manage k3s cluster
-- [ ] Set up kubectl access for all team members
+- [ ] Finalize whether Pi-hole lives on the laptop, the Pi, or not at all
+- [ ] Deploy Uptime Kuma and connect one notification channel
+- [ ] Add Grafana alerts for CPU, memory, and disk thresholds
+- [ ] Decide whether staging should be a Compose project or a VM
+- [ ] Keep the Pi online only if it adds real redundancy value
 
 ---
 
 ## Maintenance Notes
 
-**Last Updated:** 2025-12-08
+**Last Updated:** 2026-03-17
 
-**Recent Changes:**
+**Current direction:**
 
-- Homer and Pi-hole migrated from pi3-utils to homelab-mgmt
-- kubectl configured locally with access to k3s cluster
-- Portainer and Docker Registry deployed on homelab-mgmt
-- K3s cluster running: Prometheus, Grafana, Loki
-- Added kubectl configuration: `export KUBECONFIG=~/.kube/k3s-config`
-
-**Recent Changes:**
-
-- Pi-hole deployed on pi3-utils (docker-compose)
-- Fixed systemd-resolved conflict on Raspberry Pi OS
-- Replaced community.docker module with shell for reliability
-
-**Known Issues:**
-
-- None currently
-
-**Backup Status:**
-
-- Jenkins config: Not automated
-- Grafana dashboards: Not backed up
-- Pi-hole config: Persistent volumes in /opt/pihole
+- Single-host-first homelab on the laptop
+- Optional Pi for independent alerting and small redundancy tasks
+- Router remains the edge device for WireGuard and DHCP

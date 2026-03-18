@@ -7,39 +7,42 @@ all:
           ansible_host: 192.168.8.1
           ansible_user: root
           ansible_become: false
-          ansible_ssh_private_key_file: ~/.ssh/id_rsa_glinet
           ansible_ssh_common_args: "-o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedKeyTypes=+ssh-rsa"
 
-    servers:
+    # Production Environment (Laptop @ 192.168.8.10)
+    prod:
       hosts:
-        homelab-main:
+        homelab-laptop:
           ansible_host: 192.168.8.10
           ansible_user: dcsicsak
           ansible_become: true
           ansible_become_method: sudo
 
+    # Staging Environment (Laptop @ 192.168.8.11 - brought up on demand)
+    staging:
+      hosts:
         homelab-staging:
           ansible_host: 192.168.8.11
           ansible_user: dcsicsak
           ansible_become: true
           ansible_become_method: sudo
 
-        homelab-mgmt:
-          ansible_host: 192.168.8.12
-          ansible_user: dcsicsak
-          ansible_become: true
-          ansible_become_method: sudo
-
-    pis:
+    # Monitoring & Alerting (Optional Pi @ 192.168.8.20)
+    monitoring:
       hosts:
-        pi4-node1:
+        monitoring-pi:
           ansible_host: 192.168.8.20
           ansible_user: dcsicsak
           ansible_become: true
           ansible_become_method: sudo
 
-        pi4-node2:
-          ansible_host: 192.168.8.21
-          ansible_user: dcsicsak
-          ansible_become: true
-          ansible_become_method: sudo
+    # Logical groupings for easier targeting
+    servers:
+      children:
+        prod:
+        staging:
+
+    services_host:
+      children:
+        prod:
+        staging:

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Ansible automates all homelab configuration management - from initial system setup to service deployment. All nodes (servers, Pis, router) are managed through Ansible playbooks with idempotent, version-controlled infrastructure.
+Ansible automates the simplified homelab configuration - router, main laptop, and optional monitoring Pi - with idempotent, version-controlled playbooks.
 
 ---
 
@@ -19,7 +19,7 @@ ansible/
     ├── bootstrap_glinet.yml         # Router Python installation
     ├── setup_glinet_openwrt.yml     # Router network/DHCP config
     ├── setup_glinet_wireguard.yml   # VPN setup
-    ├── setup_main_server.yml        # Main server setup
+    ├── setup_servers.yml            # Main laptop setup
     └── setup_glinet_ddns.yml        # Dynamic DNS
 ```
 
@@ -175,7 +175,7 @@ ansible-playbook -i inventory.yml playbooks/<playbook>.yml --tags docker,firewal
 Limit to specific hosts:
 
 ```bash
-ansible-playbook -i inventory.yml playbooks/<playbook>.yml --limit homelab-main
+ansible-playbook -i inventory.yml playbooks/<playbook>.yml --limit homelab-laptop
 ```
 
 Verbose output (add more v's for detail):
@@ -191,10 +191,11 @@ ansible-playbook -i inventory.yml playbooks/<playbook>.yml -vvv
 Use these group names with `ansible` commands or `--limit`:
 
 - **`routers`** - GL.iNet SF1200 at 192.168.8.1
-- **`servers`** - x86 servers (ThinkPad, Asus) at .10, .11
-- **`pis`** - All Raspberry Pis at .20-.22
-- **`staging`** - Staging server only (.11)
-- **Specific hosts:** `homelab-main`, `pi4-node1`, `glinet-router`, etc.
+- **`laptop`** - main homelab laptop at 192.168.8.10
+- **`servers`** - alias for the laptop host so base setup flows stay simple
+- **`monitoring`** - optional Raspberry Pi at 192.168.8.20
+- **`observability`** - laptop plus monitoring Pi for exporters or monitoring-related tasks
+- **Specific hosts:** `homelab-laptop`, `monitoring-pi`, `glinet-router`
 
 ---
 
@@ -222,7 +223,7 @@ See `ansible/playbooks/README.md` for detailed documentation of each playbook.
 - Docker and Docker Compose setup
 - Laptop lid-close configuration
 - Firewall setup for Docker and SSH
-- Targets all x86 servers (main and staging)
+- Targets the main laptop through the `servers` group
 - Requires `--ask-become-pass`
 
 **`setup_glinet_wireguard.yml`**
@@ -237,7 +238,7 @@ See `ansible/playbooks/README.md` for detailed documentation of each playbook.
 
 ### Before Running Playbooks
 
-1. **Update inventory**: Ensure IPs and usernames are correct
+1. **Update inventory**: Ensure IPs and usernames are correct for the router, laptop, and optional Pi
 2. **Deploy SSH keys**: Test passwordless SSH to all targets
 3. **Test connectivity**: `ansible -i inventory.yml <host> -m ping`
 4. **Check vars files**: Copy `.example` files and fill in real values
@@ -246,6 +247,7 @@ See `ansible/playbooks/README.md` for detailed documentation of each playbook.
 
 - **Use tags**: Group related tasks (e.g., `packages`, `docker`, `firewall`)
 - **Be idempotent**: Playbooks should be safe to run multiple times
+- **Prefer logical groups**: Target `laptop`, `monitoring`, or `observability` instead of inventing new hostnames
 - **Document**: Add playbook details to `playbooks/README.md`
 - **Test first**: Use `--check` mode for dry runs
 - **Handle errors**: Use `ignore_errors` or `failed_when` appropriately

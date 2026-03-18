@@ -1,21 +1,18 @@
 # Homelab Infrastructure Project
 
-A production-like DevOps learning environment built on real hardware, focusing on automation, containerization, and infrastructure as code.
+A simplified DevOps learning environment built around two identical laptops, one router, and an optional Raspberry Pi for alerts/redundancy.
 
 ---
 
 ## Overview
 
-This homelab serves as a practical platform for learning and demonstrating DevOps and platform engineering skills. The project emphasizes reproducible infrastructure, configuration as code, and production-ready workflows on self-hosted hardware.
+This homelab serves as a practical platform for learning and demonstrating DevOps and platform engineering skills. The project emphasizes:
 
-**Key focus areas:**
-
-- Configuration management and automation (Ansible)
-- Container orchestration (Docker, Kubernetes)
-- CI/CD pipeline development (Jenkins)
-- Infrastructure as code (Terraform)
-- Monitoring and observability (Prometheus, Grafana)
-- Network services (VPN, reverse proxy, DNS filtering)
+- **Reproducible infrastructure** - Identical prod and staging environments
+- **Configuration as code** - Everything automated via Ansible
+- **Safe testing** - Deploy to staging, validate, then promote to production
+- **Reliable alerting** - Get notified if something breaks
+- **Production-like workflows** - Real-world deployment practices on a small scale
 
 ---
 
@@ -23,109 +20,74 @@ This homelab serves as a practical platform for learning and demonstrating DevOp
 
 ### Hardware
 
-**Compute (x86 Architecture):**
+**Core devices:**
 
-- **homelab-main** (192.168.8.10) - ThinkPad T440 - **OFFLINE** pending OS reinstall, future production server
-- **homelab-staging** (192.168.8.11) - Asus X550C - **ACTIVE** temporarily handling production traffic
-- **homelab-mgmt** (192.168.8.12) - MiniPC (Celeron, 8GB RAM) - **PLANNED** management/CI-CD node
-
-**Compute (ARM Architecture):**
-
-- 2x Raspberry Pi 4 (4GB RAM) with M.2 SSD storage via Geekworm X862 expansion boards - **ONLINE** running observability services
-- 1x Raspberry Pi 3B+ - **DECOMMISSIONED** (unreliable, services moved to homelab-mgmt)
-
-**Networking:**
-
-- Netgear GS308EP managed PoE+ switch
-- GL.iNet SF1200 router (OpenWrt-based, VLAN-capable)
-- Evodata PoE hats powering all Raspberry Pis
-
-**Physical Infrastructure:**
-
-- Custom rack built from 2020/2040 aluminum extrusions
-- Planned 3D-printed cable management and mounting solutions
+- **homelab-laptop** (192.168.8.10) - **Production**: main services, always on
+- **homelab-staging** (192.168.8.11) - **Staging**: identical setup, brought up as needed for testing/upgrades
+- **monitoring-pi** (192.168.8.20, optional) - dedicated monitoring and alerts
+- **GL.iNet SF1200 router** (192.168.8.1) - DHCP, WireGuard VPN, DuckDNS, firewall
+- **Netgear LM1200 modem** - internet uplink
 
 ### Software Stack
 
-**Core Technologies:**
+**Base:**
 
-- **OS:** Ubuntu Server 24.04 LTS (x86 hosts), Raspberry Pi OS 64-bit (ARM nodes)
-- **Automation:** Ansible for configuration management and provisioning
-- **Containers:** Docker and Docker Compose
-- **CI/CD:** Jenkins (planned for management node)
-- **Reverse Proxy:** Nginx (planned)
-- **Monitoring:** Prometheus + Grafana (running on Pis)
-- **VPN:** WireGuard server on router
-- **DNS/Ad-Blocking:** Pi-hole (running on Pis)
-- **Service Dashboard:** Homer (running on Pis)
+- OS: Ubuntu Server 24.04 LTS (both laptops)
+- Automation: Ansible for everything
+- Containers: Docker + Docker Compose
+- Reverse proxy: Nginx
 
-**Infrastructure as Code:**
+**Services:**
 
-- Ansible playbooks for all system configuration
-- Dockerfiles and Compose manifests for service deployment
-- Terraform for future cloud and hybrid deployments
+- **Monitoring**: Prometheus, Grafana, Loki
+- **Availability**: Uptime Kuma (with Discord/email/webhook alerts)
+- **CI/CD**: Jenkins
+- **Container management**: Portainer
+- **Dashboard**: Homer (service links)
+- **DNS**: Pi-hole (ad blocker)
+- **Applications**: Portfolio website
+
+**Optional (Pi):**
+
+- Lightweight Prometheus/Grafana mirror
+- Independent alerting agent
+- Network monitoring
 
 ---
 
 ## Architecture Decisions
 
-### Three-Tier Server Design
+### Two-Laptop Prod/Staging Model
 
-The x86 infrastructure follows a three-tier separation of concerns:
+Identical x86 laptops enable true environment separation:
 
-**Management Node (homelab-mgmt @ .12):**
+- **Production (192.168.8.10)**: Main deployment, daily traffic
+- **Staging (192.168.8.11)**: Exact copy, brought up on-demand for testing
 
-- Dedicated to DevOps tooling and infrastructure management
-- **Jenkins** for CI/CD pipelines with Docker-in-Docker
-- **Portainer** for container orchestration UI
-- **Docker Registry** for private image storage
-- Isolated from production workloads to prevent build jobs from impacting services
+**Advantages:**
 
-**Staging Node (homelab-staging @ .11):**
+- Test service upgrades safely on staging before touching production
+- Develop features in isolation
+- Identical architecture = no surprises when promoting staging→prod
+- Staging laptop can be powered off when not in use (save electricity)
 
-- Test deployment target for CI/CD pipelines
-- Mirror of production environment for pre-release testing
-- Currently serving production traffic while main is offline
-- Will return to staging role when production is restored
+### Optional Pi for Alerts
 
-**Production Node (homelab-main @ .10):**
+The Pi runs independent monitoring:
 
-- Currently offline pending OS reinstall
-- Future home for stable production workloads
-- Resource-intensive applications (databases, app servers)
-- Public-facing services with reverse proxy
-
-**Current Status:**
-
-- **Pis:** Operational - Running Grafana, Prometheus, Homer, Pi-hole
-- **Staging:** Active - Handling production traffic temporarily
-- **Management:** Planned - MiniPC awaiting setup
-- **Main:** Offline - Pending OS reinstall
-
-### Kubernetes Strategy
-
-The project will introduce Kubernetes through k3s (lightweight k8s) on the Raspberry Pi 4 cluster:
-
-- Pi4s provide persistent SSD storage suitable for etcd and workload data
-- Separation of concerns: k3s for orchestration learning, x86 hosts for resource-intensive services
-- Progression path: standalone k3s cluster → optional mixed-architecture cluster → cloud migration
-
-**Rationale:** This approach balances learning objectives with operational stability. Resource-heavy tasks (Jenkins builds, databases) remain on more capable x86 hardware while Kubernetes workloads run on dedicated ARM nodes.
+- Checks if the main laptop is reachable
+- Can send notifications even if production is down
+- Lightweight, low-power, always-on if enabled
+- Not a hard requirement—production runs fine without it
 
 ### Network Design
 
-**Current:** Flat LAN (192.168.8.0/24) with static IP assignments
+Single flat LAN (192.168.8.0/24):
 
-**Future:** VLAN segmentation is a possibility but not an immediate priority. Focus remains on automation, service reliability, and monitoring before introducing network complexity.
-
----
-
-## Project Phases
-
-### Phase 1: Foundation ✅ Complete
-
-- Hardware assembly and network connectivity
-- Operating system installation and baseline configuration
+- Static DHCP reservations for all devices
+- WireGuard VPN for remote access
+- DuckDNS for dynamic public IP
+- Pi-hole for network-wide ad blocking
 - Static IP assignment and documentation
 
 ### Phase 2: Automation ✅ Complete
@@ -137,32 +99,101 @@ The project will introduce Kubernetes through k3s (lightweight k8s) on the Raspb
 
 ### Phase 3: Core Services 🔄 In Progress
 
-- WireGuard VPN server deployed on router
-- Pi-hole DNS filtering operational on Pis
-- Grafana/Prometheus monitoring stack running
-- Jenkins deployment on management node (next step)
-- Nginx reverse proxy with SSL (planned)
-- GitHub webhook integration (planned)
+- WireGuard VPN server on router
+- Laptop becomes the primary runtime for services and automation
+- Monitoring and notifications move to the laptop first, with optional Pi redundancy
 
-### Phase 4: Observability 🔄 Partial
+---
 
-- Prometheus metrics collection
-- Grafana dashboards
-- Node exporters on all hosts
-- Backup and recovery procedures
+## Quick Start
 
-### Phase 5: Orchestration
+### Deploy Prod From Scratch (Fresh Ubuntu 24.04 LTS)
 
-- k3s deployment on Raspberry Pi cluster
-- Kubernetes workload migration
-- Terraform for infrastructure provisioning
-- GitOps workflows
+```bash
+# 1. Copy SSH key to laptop
+ssh-copy-id -i ~/.ssh/id_ed25519.pub dcsicsak@192.168.8.10
 
-### Phase 6: Cloud Integration
+# 2. Deploy base infrastructure
+cd ansible
+ansible-playbook -i inventory.yml playbooks/setup_servers.yml -K -l prod
 
-- Hybrid cloud architecture using Terraform
-- Workload portability between on-prem and cloud
-- Comparative performance and cost analysis
+# 3. Deploy all services
+ansible-playbook -i inventory.yml playbooks/setup_environment.yml -K -l prod
+
+# 4. Access services
+#  - Homer dashboard: http://192.168.8.10:8081
+#  - Grafana: http://192.168.8.10:3001 (admin/admin)
+#  - Jenkins: http://192.168.8.10:9080/jenkins
+#  - Portainer: http://192.168.8.10:9000
+#  - Portfolio: http://192.168.8.10
+```
+
+### Bring Up Staging (For Testing)
+
+```bash
+# 1. Copy SSH key to staging laptop
+ssh-copy-id -i ~/.ssh/id_ed25519.pub dcsicsak@192.168.8.11
+
+# 2. Deploy base + services
+ansible-playbook -i inventory.yml playbooks/setup_servers.yml -K -l staging
+ansible-playbook -i inventory.yml playbooks/setup_environment.yml -K -l staging
+
+# 3. Test at http://192.168.8.11:8081 (Homer)
+```
+
+### Router Setup
+
+```bash
+# Copy DHCP var file and update MAC addresses
+cp ansible/vars/router_dhcp.yml.example ansible/vars/router_dhcp.yml
+vim ansible/vars/router_dhcp.yml  # Add real MACs
+
+# Deploy router
+export DUCKDNS_TOKEN="your-token"  # If using DuckDNS
+ansible-playbook -i inventory.yml playbooks/setup_glinet_complete.yml
+```
+
+---
+
+## Project Phases
+
+### Phase 1: Foundation ✅ Complete
+
+- Hardware assembled and networked
+- Operating systems installed (Ubuntu 24.04 LTS)
+- Router configured (DHCP, static reservations)
+
+### Phase 2: Automation & Deployment ✅ Complete
+
+- Ansible playbooks for all infrastructure
+- Docker Compose services deployed
+- Prod services running and accessible
+
+### Phase 3: Staging Environment ✅ Complete
+
+- Two-laptop prod/staging topology
+- Identical deployments for safe testing
+- Staging laptop deployable on-demand
+
+### Phase 4: Observability & Alerting 🔄 In Progress
+
+- Prometheus metrics ✅
+- Grafana dashboards ✅
+- Loki log aggregation ✅
+- Uptime Kuma availability checks ✅
+- Discord/email alerting setup needed
+
+### Phase 5: CI/CD Maturity
+
+- Jenkins pipeline examples
+- Automated testing and deployment
+- GitHub integration
+
+### Phase 6: Advanced Experiments
+
+- Local Kubernetes (k3d) for pod learning
+- Terraform for future cloud deployments
+- Network segmentation via VLANs
 
 ---
 
@@ -170,107 +201,189 @@ The project will introduce Kubernetes through k3s (lightweight k8s) on the Raspb
 
 ```
 homelab/
-├── README.md                    # This file
-├── hardware.md                  # Complete hardware inventory
-├── software_stack.md            # Software tools and deployment paths
-├── docs/                        # Additional documentation
-│   └── devlog/                  # Session notes and progress logs
-├── ansible/                     # Configuration management playbooks (planned)
-├── docker/                      # Container definitions and compose files (planned)
-└── terraform/                   # Infrastructure as code (planned)
+├── README.md                       # This file
+├── .env.example                    # Environment variables template
+├── ansible/
+│   ├── ansible.cfg                 # Ansible configuration
+│   ├── inventory.yml               # Inventory (prod, staging, router, monitoring)
+│   ├── playbooks/
+│   │   ├── README.md               # Detailed playbook docs
+│   │   ├── setup_servers.yml       # Base x86 server setup
+│   │   ├── setup_environment.yml   # Master orchestration playbook
+│   │   ├── setup_monitoring_stack.yml
+│   │   ├── setup_uptime_kuma.yml
+│   │   ├── setup_jenkins.yml
+│   │   ├── setup_portainer.yml
+│   │   ├── setup_pihole.yml
+│   │   ├── setup_homer.yml
+│   │   ├── setup_portfolio_site.yml
+│   │   ├── setup_glinet_complete.yml
+│   │   ├── setup_glinet_openwrt.yml
+│   │   ├── setup_glinet_ddns.yml
+│   │   ├── setup_glinet_wireguard.yml
+│   │   ├── bootstrap_glinet.yml
+│   │   └── configure_wireguard.yml
+│   └── vars/
+│       └── router_dhcp.yml.example
+├── docs/
+│   ├── ansible.md                  # Ansible setup & SSH keys
+│   ├── network_setup.md            # Router & network config
+│   ├── network_inventory.md        # Device list and IPs
+│   ├── software_stack.md           # Service descriptions
+│   ├── services_dashboard.md       # Homer dashboard config
+│   ├── prod_staging.md             # Prod/staging workflows
+│   ├── alerting.md                 # Alerting strategy
+│   ├── hardware.md                 # Hardware inventory
+│   └── populate_monitoring_services.md
+└── docker/  # Docker Compose files (embedded in playbooks currently)
 ```
 
 ---
 
-## Key Learning Outcomes
+## Key Features
 
-This project demonstrates practical experience with:
+**Prod/Staging Separation:**
 
-**Infrastructure & Automation:**
+- Identical x86 laptops running identical services
+- Test upgrades and changes on staging before production
+- Staging laptop powers off when not needed (cost savings)
 
-- Bare-metal server provisioning and lifecycle management
-- Configuration as code using Ansible
-- Idempotent, reproducible infrastructure patterns
+**Automated Deployment:**
 
-**Containerization & Orchestration:**
+- Single Ansible command deploys entire environment
+- Idempotent playbooks (safe to run repeatedly)
+- Tagged tasks for selective deployment
 
-- Docker multi-stage builds and optimization
-- Docker Compose for multi-service applications
-- Kubernetes cluster administration (k3s)
-- Multi-architecture container deployments (ARM/x86)
+**Reliable Alerting:**
 
-**CI/CD & DevOps Practices:**
+- Uptime Kuma monitors service availability
+- Grafana tracks resource metrics
+- Discord/email notifications for issues
+- Optional Pi can alert independently if main laptop is down
 
-- Jenkins pipeline development
-- Automated build, test, and deployment workflows
-- Git-based infrastructure workflows
-- Integration between CI and container orchestration
+**Production-Ready:**
 
-**Networking & Security:**
-
-- Reverse proxy configuration and TLS management
-- VPN setup for secure remote access
-- Network segmentation planning (future)
-- Firewall rule management
-
-**Monitoring & Operations:**
-
-- Metrics collection and visualization
-- Service health monitoring
-- Backup and disaster recovery planning
+- Nginx reverse proxy
+- UFW firewall with proper rules
+- Docker Compose for multi-service orchestration
+- Persistent storage for all services
 
 ---
 
-## Why a Homelab?
+## Typical Workflows
 
-Cloud platforms are excellent for production workloads, but a physical homelab offers unique learning advantages:
+### Test a Service Upgrade
 
-1. **Full control:** Complete access to the infrastructure stack, from hardware to application layer
-2. **Real constraints:** Working with limited resources teaches optimization and efficiency
-3. **Failure learning:** Safe environment to break things, troubleshoot, and rebuild
-4. **Cost-effective:** Using mostly hardware thats already laying around or cheap vs. ongoing cloud costs for experimentation
-5. **Hybrid skills:** Experience managing both on-premises and cloud infrastructure
+```bash
+# 1. Update image version in playbook
+vim playbooks/setup_jenkins.yml
 
-The ultimate goal is cloud competency, with the homelab serving as a proving ground for infrastructure patterns that will be replicated in cloud environments.
+# 2. Deploy to staging
+ansible-playbook -i inventory.yml playbooks/setup_jenkins.yml -K -l staging
 
----
+# 3. Test at http://192.168.8.11:9080/jenkins
 
-## Current Status
+# 4. If successful, deploy to prod
+ansible-playbook -i inventory.yml playbooks/setup_jenkins.yml -K -l prod
+```
 
-**Completed:**
+### Develop a Feature on Portfolio
 
-- Hardware assembly and rack construction
-- Network configuration with static IPs
-- Operating system installation on all nodes
-- Documentation structure and initial technical specifications
+```bash
+# 1. Clone your portfolio repo locally
+git clone https://github.com/yourusername/portfolio.git
 
-**In Progress:**
+# 2. Push to dev branch
+git checkout -b feature/my-changes
 
-- Ansible playbook development
-- SSH key distribution and access control
-- Jenkins installation planning
+# 3. Update playbook to use your branch
+vim playbooks/setup_portfolio_site.yml
 
-**Next Steps:**
+# 4. Deploy to staging
+ansible-playbook -i inventory.yml playbooks/setup_portfolio_site.yml -K -l staging
 
-- Execute base Ansible playbooks across all hosts
-- Deploy Jenkins on primary server
-- Create first CI/CD pipeline for containerized application
-- Implement WireGuard VPN on Raspberry Pi 4
+# 5. Test at http://192.168.8.11
+# 6. Merge to main and deploy to prod
+```
+
+### Check What's Running
+
+```bash
+# Prod services
+ssh dcsicsak@192.168.8.10 'docker ps'
+
+# Staging services
+ssh dcsicsak@192.168.8.11 'docker ps'
+
+# Prod logs
+ssh dcsicsak@192.168.8.10 'docker logs jenkins'
+```
 
 ---
 
 ## Documentation
 
-All infrastructure decisions, configurations, and procedures are documented in Markdown and version-controlled in this repository. Each significant change includes a devlog entry with context, implementation details, and lessons learned.
+See the `docs/` directory for detailed information:
+
+- **[ansible.md](docs/ansible.md)** - How to set up Ansible, SSH keys, inventory
+- **[network_setup.md](docs/network_setup.md)** - Router configuration, DHCP, WireGuard, DuckDNS
+- **[prod_staging.md](docs/prod_staging.md)** - Prod/staging deployment workflows
+- **[software_stack.md](docs/software_stack.md)** - Service descriptions and ports
+- **[alerting.md](docs/alerting.md)** - Monitoring and notification setup
+- **[ansible/playbooks/README.md](ansible/playbooks/README.md)** - Detailed playbook documentation
 
 ---
 
-## Contact
+## Why This Topology?
 
-This is a personal learning project demonstrating DevOps and platform engineering capabilities. For questions or collaboration opportunities, please reach out via GitHub.
+**Two x86 laptops instead of one:**
+
+- True environment separation (prod vs. staging)
+- Can safely test changes before touching production
+- Staging is on-demand (power off to save electricity)
+- No container/VM overhead for isolation—full OS separation
+
+**Optional Pi instead of required cluster:**
+
+- Adds independent alerting without complexity
+- Can monitor the main laptop even when it's rebooting
+- Still useful for learning network monitoring
+- Entirely optional—not needed for core functionality
+
+**Single flat network instead of complex segmentation:**
+
+- Keeps focus on infrastructure automation and deployment
+- VLAN segmentation can be added later if needed
+- Reduces router configuration complexity
+- Suitable for home learning environment
 
 ---
 
-## License
+## Current Status
 
-Documentation and configuration code in this repository are available under the MIT License. See LICENSE file for details.
+**✅ Completed:**
+
+- Router bring-up (DHCP, VPN, DDNS)
+- Prod laptop base setup and all services
+- Monitoring stack (Prometheus, Grafana, Loki)
+- Availability monitoring (Uptime Kuma)
+- Jenkins, Portainer, Pi-hole, Homer, Portfolio deployed
+- Ansible automation for entire stack
+- Documentation
+
+**🔄 In Progress:**
+
+- Fine-tuning alerts and notifications
+- Pi integration (optional monitoring)
+
+**📋 Future:**
+
+- Local Kubernetes (k3d) experiments
+- Terraform for cloud infrastructure
+- Additional Grafana dashboards
+
+---
+
+## Contact & License
+
+This is a personal DevOps learning project. Documentation is available under the MIT License.

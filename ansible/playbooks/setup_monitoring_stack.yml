@@ -1,466 +1,240 @@
 ---
-- name: Deploy Monitoring Stack to k3s
-  hosts: pi4-node1
-  become: false
+- name: Deploy monitoring stack (Prometheus + Grafana + Loki)
+  hosts: services_host
+  become: true
 
   vars:
-    monitoring_namespace: monitoring
+    monitoring_dir: /srv/monitoring
+    prometheus_port: 30090
+    grafana_port: 30030
+    loki_port: 3100
+    grafana_admin_password: "admin" # change after first login
 
   tasks:
-    - name: Create monitoring namespace
-      ansible.builtin.command:
-        cmd: kubectl create namespace {{ monitoring_namespace }}
-      register: ns_result
-      failed_when: ns_result.rc != 0 and 'AlreadyExists' not in ns_result.stderr
-      changed_when: ns_result.rc == 0
-      tags: namespace
-
-    - name: Label namespace for Pod Security Standards
-      ansible.builtin.command:
-        cmd: kubectl label namespace {{ monitoring_namespace }} pod-security.kubernetes.io/enforce=privileged --overwrite
-      tags: namespace
-
-    - name: Create manifests directory
+    - name: Create monitoring directories
       ansible.builtin.file:
-        path: /home/{{ ansible_user }}/k3s-manifests/monitoring
+        path: "{{ item }}"
         state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
         mode: "0755"
-      tags: manifests
-
-    - name: Deploy Prometheus ConfigMap
-      ansible.builtin.copy:
-        content: |
-          apiVersion: v1
-          kind: ConfigMap
-          metadata:
-            name: prometheus-config
-            namespace: {{ monitoring_namespace }}
-          data:
-            prometheus.yml: |
-              global:
-                scrape_interval: 15s
-                evaluation_interval: 15s
-              scrape_configs:
-                - job_name: 'prometheus'
-                  static_configs:
-                    - targets: ['localhost:9090']
-                - job_name: 'node-exporter'
-                  static_configs:
-                    - targets: ['192.168.8.20:9100', '192.168.8.21:9100', '192.168.8.22:9100', '192.168.8.10:9100']
-                - job_name: 'kubernetes-nodes'
-                  kubernetes_sd_configs:
-                    - role: node
-                  relabel_configs:
-                    - source_labels: [__address__]
-                      regex: '(.*):10250'
-                      replacement: '${1}:9100'
-                      target_label: __address__
-        dest: /home/{{ ansible_user }}/k3s-manifests/monitoring/prometheus-config.yaml
-        mode: "0644"
-      tags: prometheus
-
-    - name: Apply Prometheus ConfigMap
-      ansible.builtin.command:
-        cmd: kubectl apply -f /home/{{ ansible_user }}/k3s-manifests/monitoring/prometheus-config.yaml
-      tags: prometheus
-
-    - name: Deploy Prometheus
-      ansible.builtin.copy:
-        content: |
-          apiVersion: apps/v1
-          kind: Deployment
-          metadata:
-            name: prometheus
-            namespace: {{ monitoring_namespace }}
-          spec:
-            replicas: 1
-            selector:
-              matchLabels:
-                app: prometheus
-            template:
-              metadata:
-                labels:
-                  app: prometheus
-              spec:
-                securityContext:
-                  fsGroup: 65534
-                initContainers:
-                  - name: init-chown-data
-                    image: busybox:latest
-                    command: ['sh', '-c', 'chown -R 65534:65534 /prometheus']
-                    volumeMounts:
-                      - name: prometheus-storage
-                        mountPath: /prometheus
-                containers:
-                  - name: prometheus
-                    image: prom/prometheus:latest
-                    args:
-                      - '--config.file=/etc/prometheus/prometheus.yml'
-                      - '--storage.tsdb.path=/prometheus'
-                      - '--storage.tsdb.retention.time=7d'
-                    ports:
-                      - containerPort: 9090
-                    volumeMounts:
-                      - name: prometheus-config
-                        mountPath: /etc/prometheus
-                      - name: prometheus-storage
-                        mountPath: /prometheus
-                volumes:
-                  - name: prometheus-config
-                    configMap:
-                      name: prometheus-config
-                  - name: prometheus-storage
-                    hostPath:
-                      path: /var/lib/prometheus
-                      type: DirectoryOrCreate
-          ---
-          apiVersion: v1
-          kind: Service
-          metadata:
-            name: prometheus
-            namespace: {{ monitoring_namespace }}
-          spec:
-            type: NodePort
-            selector:
-              app: prometheus
-            ports:
-              - port: 9090
-                targetPort: 9090
-                nodePort: 30090
-        dest: /home/{{ ansible_user }}/k3s-manifests/monitoring/prometheus.yaml
-        mode: "0644"
-      tags: prometheus
-
-    - name: Apply Prometheus deployment
-      ansible.builtin.command:
-        cmd: kubectl apply -f /home/{{ ansible_user }}/k3s-manifests/monitoring/prometheus.yaml
-      tags: prometheus
-
-    - name: Deploy Loki
-      ansible.builtin.copy:
-        content: |
-          apiVersion: apps/v1
-          kind: Deployment
-          metadata:
-            name: loki
-            namespace: {{ monitoring_namespace }}
-          spec:
-            replicas: 1
-            selector:
-              matchLabels:
-                app: loki
-            template:
-              metadata:
-                labels:
-                  app: loki
-              spec:
-                securityContext:
-                  fsGroup: 10001
-                initContainers:
-                  - name: init-chown-data
-                    image: busybox:latest
-                    command: ['sh', '-c', 'chown -R 10001:10001 /loki']
-                    volumeMounts:
-                      - name: loki-storage
-                        mountPath: /loki
-                containers:
-                  - name: loki
-                    image: grafana/loki:latest
-                    args:
-                      - -config.file=/etc/loki/local-config.yaml
-                    ports:
-                      - containerPort: 3100
-                    volumeMounts:
-                      - name: loki-storage
-                        mountPath: /loki
-                volumes:
-                  - name: loki-storage
-                    hostPath:
-                      path: /var/lib/loki
-                      type: DirectoryOrCreate
-          ---
-          apiVersion: v1
-          kind: Service
-          metadata:
-            name: loki
-            namespace: {{ monitoring_namespace }}
-          spec:
-            type: ClusterIP
-            selector:
-              app: loki
-            ports:
-              - port: 3100
-                targetPort: 3100
-        dest: /home/{{ ansible_user }}/k3s-manifests/monitoring/loki.yaml
-        mode: "0644"
-      tags: loki
-
-    - name: Apply Loki deployment
-      ansible.builtin.command:
-        cmd: kubectl apply -f /home/{{ ansible_user }}/k3s-manifests/monitoring/loki.yaml
-      tags: loki
-
-    - name: Deploy Grafana
-      ansible.builtin.copy:
-        content: |
-          apiVersion: apps/v1
-          kind: Deployment
-          metadata:
-            name: grafana
-            namespace: {{ monitoring_namespace }}
-          spec:
-            replicas: 1
-            selector:
-              matchLabels:
-                app: grafana
-            template:
-              metadata:
-                labels:
-                  app: grafana
-              spec:
-                securityContext:
-                  fsGroup: 472
-                initContainers:
-                  - name: init-chown-data
-                    image: busybox:latest
-                    command: ['sh', '-c', 'chown -R 472:472 /var/lib/grafana']
-                    volumeMounts:
-                      - name: grafana-storage
-                        mountPath: /var/lib/grafana
-                containers:
-                  - name: grafana
-                    image: grafana/grafana:latest
-                    ports:
-                      - containerPort: 3000
-                    env:
-                      - name: GF_SECURITY_ADMIN_PASSWORD
-                        value: admin
-                    volumeMounts:
-                      - name: grafana-storage
-                        mountPath: /var/lib/grafana
-                volumes:
-                  - name: grafana-storage
-                    hostPath:
-                      path: /var/lib/grafana
-                      type: DirectoryOrCreate
-          ---
-          apiVersion: v1
-          kind: Service
-          metadata:
-            name: grafana
-            namespace: {{ monitoring_namespace }}
-          spec:
-            type: NodePort
-            selector:
-              app: grafana
-            ports:
-              - port: 3000
-                targetPort: 3000
-                nodePort: 30030
-        dest: /home/{{ ansible_user }}/k3s-manifests/monitoring/grafana.yaml
-        mode: "0644"
-      tags: grafana
-
-    - name: Apply Grafana deployment
-      ansible.builtin.command:
-        cmd: kubectl apply -f /home/{{ ansible_user }}/k3s-manifests/monitoring/grafana.yaml
-      tags: grafana
-
-    - name: Wait for deployments to be ready
-      ansible.builtin.command:
-        cmd: kubectl wait --for=condition=available --timeout=300s deployment/{{ item }} -n {{ monitoring_namespace }}
       loop:
-        - prometheus
-        - loki
-        - grafana
-      tags: verify
+        - "{{ monitoring_dir }}"
+        - "{{ monitoring_dir }}/prometheus"
+        - "{{ monitoring_dir }}/loki"
+      tags: setup
 
-    - name: Get all pods
-      ansible.builtin.command:
-        cmd: kubectl get pods -n {{ monitoring_namespace }}
-      register: pods_output
-      changed_when: false
-      tags: verify
-
-    - name: Display pods
-      ansible.builtin.debug:
-        msg: "{{ pods_output.stdout_lines }}"
-      tags: verify
-
-    - name: Display access information
-      ansible.builtin.debug:
-        msg:
-          - "Monitoring stack deployed successfully!"
-          - "Access URLs:"
-          - "  Prometheus: http://192.168.8.20:30090"
-          - "  Grafana: http://192.168.8.20:30030 (admin/admin)"
-          - ""
-          - "To add Prometheus as data source in Grafana:"
-          - "  URL: http://prometheus.monitoring.svc.cluster.local:9090"
-          - "To add Loki as data source in Grafana:"
-          - "  URL: http://loki.monitoring.svc.cluster.local:3100"
-      tags: verify
-
-- name: Deploy Node Exporters on Pi nodes
-  hosts: pis
-  become: true
-  gather_facts: true
-
-  tasks:
-    - name: Create node-exporter user
-      ansible.builtin.user:
-        name: node-exporter
-        system: true
-        shell: /bin/false
-        create_home: false
-      tags: node-exporter
-
-    - name: Download node exporter
-      ansible.builtin.get_url:
-        url: https://github.com/prometheus/node_exporter/releases/download/v1.8.2/node_exporter-1.8.2.linux-arm64.tar.gz
-        dest: /tmp/node_exporter.tar.gz
-        mode: "0644"
-      when: "'pi' in inventory_hostname or 'pis' in group_names"
-      tags: node-exporter
-
-    - name: Download node exporter (x86_64)
-      ansible.builtin.get_url:
-        url: https://github.com/prometheus/node_exporter/releases/download/v1.8.2/node_exporter-1.8.2.linux-amd64.tar.gz
-        dest: /tmp/node_exporter.tar.gz
-        mode: "0644"
-      when: "'server' in group_names or 'staging' in group_names"
-      tags: node-exporter
-
-    - name: Extract node exporter
-      ansible.builtin.unarchive:
-        src: /tmp/node_exporter.tar.gz
-        dest: /tmp
-        remote_src: true
-      tags: node-exporter
-
-    - name: Copy node exporter binary
+    - name: Write Prometheus config
       ansible.builtin.copy:
-        src: "/tmp/node_exporter-1.8.2.linux-{{ 'arm64' if ('pi' in inventory_hostname or 'pis' in group_names) else 'amd64' }}/node_exporter"
-        dest: /usr/local/bin/node_exporter
-        remote_src: true
-        owner: node-exporter
-        group: node-exporter
-        mode: "0755"
-      tags: node-exporter
-
-    - name: Create node exporter systemd service
-      ansible.builtin.copy:
+        dest: "{{ monitoring_dir }}/prometheus/prometheus.yml"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0644"
         content: |
-          [Unit]
-          Description=Prometheus Node Exporter
-          After=network.target
+          global:
+            scrape_interval: 15s
+            evaluation_interval: 15s
 
-          [Service]
-          User=node-exporter
-          Group=node-exporter
-          Type=simple
-          ExecStart=/usr/local/bin/node_exporter
+          scrape_configs:
+            - job_name: 'prometheus'
+              static_configs:
+                - targets: ['localhost:9090']
 
-          [Install]
-          WantedBy=multi-user.target
-        dest: /etc/systemd/system/node_exporter.service
+            - job_name: 'node-exporter'
+              static_configs:
+                - targets:
+                    - '192.168.8.10:9100'
+      tags: prometheus
+
+    - name: Write Loki config
+      ansible.builtin.copy:
+        dest: "{{ monitoring_dir }}/loki/loki-config.yml"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
         mode: "0644"
-      tags: node-exporter
+        content: |
+          auth_enabled: false
+          server:
+            http_listen_port: 3100
+          ingester:
+            lifecycler:
+              ring:
+                kvstore:
+                  store: inmemory
+                replication_factor: 1
+            wal:
+              enabled: true
+              dir: /loki/wal
+          schema_config:
+            configs:
+              - from: 2024-01-01
+                store: boltdb-shipper
+                object_store: filesystem
+                schema: v11
+                index:
+                  prefix: index_
+                  period: 24h
+          storage_config:
+            boltdb_shipper:
+              active_index_directory: /loki/index
+              cache_location: /loki/cache
+            filesystem:
+              directory: /loki/chunks
+          limits_config:
+            allow_structured_metadata: false
+          compactor:
+            working_directory: /loki/compactor
+      tags: loki
 
-    - name: Enable and start node exporter
-      ansible.builtin.systemd:
-        name: node_exporter
-        state: started
-        enabled: true
-        daemon_reload: true
-      tags: node-exporter
+    - name: Write monitoring docker compose file
+      ansible.builtin.copy:
+        dest: "{{ monitoring_dir }}/docker-compose.yml"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0644"
+        content: |
+          services:
+            prometheus:
+              image: prom/prometheus:latest
+              container_name: prometheus
+              restart: unless-stopped
+              volumes:
+                - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+                - prometheus_data:/prometheus
+              command:
+                - '--config.file=/etc/prometheus/prometheus.yml'
+                - '--storage.tsdb.path=/prometheus'
+                - '--storage.tsdb.retention.time=15d'
+              ports:
+                - "{{ prometheus_port }}:9090"
 
-    - name: Open node exporter port in firewall (Rocky Linux)
-      ansible.posix.firewalld:
-        port: 9100/tcp
-        permanent: true
-        immediate: true
-        state: enabled
-      when: ansible_os_family == "RedHat"
-      tags: node-exporter
+            grafana:
+              image: grafana/grafana:latest
+              container_name: grafana
+              restart: unless-stopped
+              environment:
+                - GF_SECURITY_ADMIN_PASSWORD={{ grafana_admin_password }}
+                - GF_USERS_ALLOW_SIGN_UP=false
+                - GF_UNIFIED_ALERTING_ENABLED=true
+              volumes:
+                - grafana_data:/var/lib/grafana
+              ports:
+                - "{{ grafana_port }}:3000"
+              depends_on:
+                - prometheus
 
-    - name: Open node exporter port in firewall (Ubuntu/Debian)
-      community.general.ufw:
-        rule: allow
-        port: "9100"
-        proto: tcp
-      when: ansible_os_family == "Debian"
-      tags: node-exporter
+            loki:
+              image: grafana/loki:latest
+              container_name: loki
+              restart: unless-stopped
+              command:
+                - -config.file=/etc/loki/loki-config.yml
+                - -validation.allow-structured-metadata=false
+              volumes:
+                - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+                - loki_data:/loki
+              ports:
+                - "{{ loki_port }}:3100"
 
-- name: Deploy Node Exporter on x86 servers
-  hosts: servers
-  become: true
-  gather_facts: true
-  ignore_unreachable: true
+          volumes:
+            prometheus_data:
+            grafana_data:
+            loki_data:
+      tags: compose
 
-  tasks:
-    - name: Create node-exporter user
+    - name: Create node_exporter user
       ansible.builtin.user:
-        name: node-exporter
+        name: node_exporter
         system: true
-        shell: /bin/false
+        shell: /usr/sbin/nologin
         create_home: false
       tags: node-exporter
 
-    - name: Download node exporter (x86_64)
+    - name: Download node_exporter
       ansible.builtin.get_url:
         url: https://github.com/prometheus/node_exporter/releases/download/v1.8.2/node_exporter-1.8.2.linux-amd64.tar.gz
         dest: /tmp/node_exporter.tar.gz
         mode: "0644"
       tags: node-exporter
 
-    - name: Extract node exporter
+    - name: Extract node_exporter
       ansible.builtin.unarchive:
         src: /tmp/node_exporter.tar.gz
-        dest: /tmp
+        dest: /tmp/
         remote_src: true
       tags: node-exporter
 
-    - name: Copy node exporter binary
+    - name: Install node_exporter binary
       ansible.builtin.copy:
         src: /tmp/node_exporter-1.8.2.linux-amd64/node_exporter
         dest: /usr/local/bin/node_exporter
-        remote_src: true
-        owner: node-exporter
-        group: node-exporter
+        owner: node_exporter
+        group: node_exporter
         mode: "0755"
+        remote_src: true
+      notify: Restart node_exporter
       tags: node-exporter
 
-    - name: Create node exporter systemd service
+    - name: Install node_exporter systemd unit
       ansible.builtin.copy:
+        dest: /etc/systemd/system/node_exporter.service
+        mode: "0644"
         content: |
           [Unit]
           Description=Prometheus Node Exporter
           After=network.target
 
           [Service]
-          User=node-exporter
-          Group=node-exporter
+          User=node_exporter
+          Group=node_exporter
           Type=simple
           ExecStart=/usr/local/bin/node_exporter
+          Restart=on-failure
+          RestartSec=5
 
           [Install]
           WantedBy=multi-user.target
-        dest: /etc/systemd/system/node_exporter.service
-        mode: "0644"
+      notify: Restart node_exporter
       tags: node-exporter
 
-    - name: Enable and start node exporter
+    - name: Enable and start node_exporter
       ansible.builtin.systemd:
         name: node_exporter
-        state: started
         enabled: true
+        state: started
         daemon_reload: true
       tags: node-exporter
 
-    - name: Open node exporter port in firewall (Ubuntu)
+    - name: Start monitoring stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ monitoring_dir }}"
+        state: present
+        pull: always
+      tags: compose
+
+    - name: Open monitoring ports in firewall
       community.general.ufw:
         rule: allow
-        port: "9100"
+        port: "{{ item }}"
         proto: tcp
-      tags: node-exporter
+      loop:
+        - "{{ prometheus_port }}"
+        - "{{ grafana_port }}"
+        - "{{ loki_port }}"
+        - "9100"
+      tags: firewall
+
+    - name: Display monitoring URLs
+      ansible.builtin.debug:
+        msg:
+          - "Prometheus: http://{{ ansible_host }}:{{ prometheus_port }}"
+          - "Grafana: http://{{ ansible_host }}:{{ grafana_port }} (admin/{{ grafana_admin_password }})"
+          - "Loki: http://{{ ansible_host }}:{{ loki_port }}"
+      tags: verify
+
+  handlers:
+    - name: Restart node_exporter
+      ansible.builtin.systemd:
+        name: node_exporter
+        state: restarted
+        daemon_reload: true

@@ -70,14 +70,11 @@
         enabled: true
       tags: docker
 
-    - name: Add current user and Jenkins to docker group
+    - name: Add current user to docker group
       ansible.builtin.user:
-        name: "{{ item }}"
+        name: "{{ ansible_user }}"
         groups: docker
         append: true
-      loop:
-        - "{{ ansible_user }}"
-        - jenkins
       tags: docker
 
     - name: Allow Jenkins to access docker.sock

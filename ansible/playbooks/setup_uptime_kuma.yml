@@ -1,0 +1,62 @@
+---
+- name: Deploy Uptime Kuma on services host
+  hosts: services_host
+  become: true
+
+  vars:
+    uptime_kuma_data_dir: /srv/uptime-kuma
+    uptime_kuma_port: 3001
+    uptime_kuma_image: louislam/uptime-kuma:1
+
+  tasks:
+    - name: Create Uptime Kuma data directory
+      ansible.builtin.file:
+        path: "{{ uptime_kuma_data_dir }}"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0755"
+      tags: setup
+
+    - name: Pull Uptime Kuma Docker image
+      community.docker.docker_image:
+        name: "{{ uptime_kuma_image }}"
+        source: pull
+      tags: setup
+
+    - name: Deploy Uptime Kuma container
+      community.docker.docker_container:
+        name: uptime-kuma
+        image: "{{ uptime_kuma_image }}"
+        state: started
+        restart_policy: unless-stopped
+        ports:
+          - "{{ uptime_kuma_port }}:3001"
+        volumes:
+          - "{{ uptime_kuma_data_dir }}:/app/data"
+        networks:
+          - name: bridge
+      tags: setup
+
+    - name: Allow Uptime Kuma port through UFW
+      community.general.ufw:
+        rule: allow
+        port: "{{ uptime_kuma_port }}"
+        proto: tcp
+        comment: Uptime Kuma
+      tags: firewall
+
+    - name: Wait for Uptime Kuma to be ready
+      ansible.builtin.uri:
+        url: "http://localhost:{{ uptime_kuma_port }}"
+        status_code: 200
+      register: result
+      until: result.status == 200
+      retries: 12
+      delay: 5
+      tags: verify
+
+    - name: Display access URL
+      ansible.builtin.debug:
+        msg: "Uptime Kuma is running at http://{{ ansible_host }}:{{ uptime_kuma_port }}"
+      tags: verify

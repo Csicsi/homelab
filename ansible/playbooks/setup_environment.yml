@@ -1,0 +1,80 @@
+---
+# Master orchestration playbook for setting up prod/staging environments
+# Usage:
+#   ansible-playbook -i inventory.yml playbooks/setup_environment.yml -K               # All environments
+#   ansible-playbook -i inventory.yml playbooks/setup_environment.yml -K -l prod       # Prod only
+#   ansible-playbook -i inventory.yml playbooks/setup_environment.yml -K -l staging    # Staging only
+
+- name: Setup complete homelab environment
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    # Choose which environment to set up (or use -l flag to override)
+    target_environment: "all" # 'prod', 'staging', or 'all'
+
+  tasks:
+    - name: Display setup information
+      ansible.builtin.debug:
+        msg:
+          - "Setting up homelab environment..."
+          - "Production: 192.168.8.10"
+          - "Staging: 192.168.8.11 (on-demand)"
+          - "Monitoring Pi: 192.168.8.20 (optional)"
+
+    - name: Run base server setup
+      ansible.builtin.include_tasks:
+        file: setup_servers.yml
+      vars:
+        ansible_limit: "{{ ansible_limit | default('servers') }}"
+
+    - name: Run monitoring stack deployment
+      ansible.builtin.include_tasks:
+        file: setup_monitoring_stack.yml
+      vars:
+        ansible_limit: "{{ ansible_limit | default('services_host') }}"
+
+    - name: Run Homer dashboard setup
+      ansible.builtin.include_tasks:
+        file: setup_homer.yml
+      vars:
+        ansible_limit: "{{ ansible_limit | default('services_host') }}"
+
+    - name: Run Uptime Kuma setup
+      ansible.builtin.include_tasks:
+        file: setup_uptime_kuma.yml
+      vars:
+        ansible_limit: "{{ ansible_limit | default('services_host') }}"
+
+    - name: Run Jenkins setup
+      ansible.builtin.include_tasks:
+        file: setup_jenkins.yml
+      vars:
+        ansible_limit: "{{ ansible_limit | default('services_host') }}"
+
+    - name: Run Portainer setup
+      ansible.builtin.include_tasks:
+        file: setup_portainer.yml
+      vars:
+        ansible_limit: "{{ ansible_limit | default('services_host') }}"
+
+    - name: Run Pi-hole setup
+      ansible.builtin.include_tasks:
+        file: setup_pihole.yml
+      vars:
+        ansible_limit: "{{ ansible_limit | default('services_host') }}"
+
+    - name: Run Portfolio site setup
+      ansible.builtin.include_tasks:
+        file: setup_portfolio_site.yml
+      vars:
+        ansible_limit: "{{ ansible_limit | default('services_host') }}"
+
+    - name: Setup complete
+      ansible.builtin.debug:
+        msg:
+          - "✓ Environment setup complete!"
+          - "Access services:"
+          - "  Homer: http://192.168.8.10:8081 (prod)"
+          - "  Grafana: http://192.168.8.10:3001 (prod)"
+          - "  Jenkins: http://192.168.8.10:9080 (prod)"

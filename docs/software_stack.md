@@ -2,24 +2,22 @@
 
 ## Purpose
 
-This document describes the operating systems, tools, and services planned for the homelab. The stack is designed to support reproducible automation, container-based deployments, and infrastructure-as-code workflows — all focused on learning DevOps and platform engineering.
+This document describes the operating systems, tools, and services for the simplified homelab. The stack keeps the hardware minimal while preserving clean stage separation through containers, VMs, and local Kubernetes.
 
 ---
 
 ## Operating Systems
 
-| Host                | OS              | Version    | Role                                                   |
-| ------------------- | --------------- | ---------- | ------------------------------------------------------ |
-| ThinkPad T440       | Ubuntu Server   | 24.04 LTS  | Main server — Ansible control, Docker host, Jenkins CI |
-| Asus X550C          | Ubuntu Server   | 24.04 LTS  | Staging / reserve node                                 |
-| Raspberry Pi 4 (x2) | Raspberry Pi OS | 64-bit     | Critical services: k3s nodes, VPN, monitoring          |
-| Raspberry Pi 3B+    | Raspberry Pi OS | 64-bit     | Low-priority utilities: Pi-hole, experiments           |
-| Workstation         | Ubuntu / Debian | Latest LTS | Development and testing                                |
+| Host           | OS              | Version    | Role                                                       |
+| -------------- | --------------- | ---------- | ---------------------------------------------------------- |
+| Homelab laptop | Ubuntu Server   | 24.04 LTS  | Primary host — Ansible control, Docker host, local k8s lab |
+| Monitoring Pi  | Raspberry Pi OS | 64-bit     | Optional redundancy node for monitoring, alerting, or DNS  |
+| Workstation    | Ubuntu / Debian | Latest LTS | Development and testing                                    |
 
 Notes:
 
 - Ubuntu Server 24.04 LTS chosen for long-term support, Debian compatibility, and wide community adoption
-- Raspberry Pi OS provides good ARM support and community documentation
+- Raspberry Pi OS is only needed if the optional Pi stays in service
 - All systems use 64-bit where possible
 
 ---
@@ -28,53 +26,48 @@ Notes:
 
 ### Automation and Provisioning
 
-- **Ansible**: Centralized configuration management from the ThinkPad control node
-  - Playbooks for system updates, package installation, Docker setup, user management
-  - Inventory organized by role (servers, pis, staging)
+- **Ansible**: Centralized configuration management from the homelab laptop
+  - Playbooks for router, laptop, and optional monitoring Pi
+  - Inventory organized by logical role instead of many physical machines
 
 ### Containers and Orchestration
 
-- **Docker**: Initial container runtime for single-host deployments
-- **Docker Compose**: Multi-container application definitions and Pi-hole deployment
-- **k3s Kubernetes**: 2-node cluster on Pi4s for monitoring stack and learning
-  - **Architecture**: Pi4 node 1 (server) + Pi4 node 2 (agent)
-  - **Deployment**: Prometheus, Grafana, and Loki run as k3s pods
-  - **Design rationale**: Keep cluster simple and focused on observability
-  - **Disabled components**: Traefik (use NodePort), ServiceLB (not needed)
-  - **Heavy workloads**: Jenkins, databases, build agents remain on x86 Docker hosts
+- **Docker**: default runtime for services on the laptop
+- **Docker Compose**: primary way to separate production and staging stacks on one host
+- **VMs**: optional isolation for risky experiments, alternative operating systems, or firewall labs
+- **k3d** or **kind**: lightweight local Kubernetes for pod-based learning without extra devices
+  - Good for testing Deployments, Services, Ingress, Helm, and GitOps locally
+  - Avoids maintaining a dedicated multi-node Pi cluster
 
 ### CI/CD
 
-- **Jenkins**: Build automation and deployment pipelines
-  - Initial pipelines: build Docker images, push to registry, deploy via Compose or k8s
-  - Webhook triggers from GitHub
-  - Runs on ThinkPad T440 as primary CI server
+- **Jenkins**: optional build automation if local CI remains useful
+  - Can build Docker images and deploy to Compose or a local k8s lab
+  - Should stay only if it supports active workflows
 
 ### Networking and Security
 
-- **Nginx**: Reverse proxy and TLS termination (planned)
+- **Nginx** or **Caddy**: Reverse proxy and TLS termination on the laptop
   - HTTP/HTTPS routing for containerized services
   - Let's Encrypt integration for SSL certificates
   - Load balancing for multi-instance deployments
 - **WireGuard**: VPN server on GL.iNet router for remote access
-- **Pi-hole**: DNS filtering and ad blocking via Docker on Pi3
+- **Pi-hole**: optional DNS filtering via Docker on the laptop or optional Pi
 - **Firewall**: UFW on Ubuntu Server, UFW on Raspberry Pis
 
 ### Monitoring and Observability
 
-- **Prometheus**: Metrics collection deployed on k3s cluster
-  - Scrapes node exporters from all hosts (Pis + laptops)
-  - 7-day retention, 15-second scrape interval
-  - NodePort access: http://192.168.8.20:30090
-- **Grafana**: Dashboards and visualization on k3s
-  - Pre-configured with Prometheus and Loki data sources
-  - NodePort access: http://192.168.8.20:30030
-  - Default credentials: admin/admin
-- **Loki**: Log aggregation on k3s cluster
-  - Lightweight alternative to ELK stack
-  - Integrated with Grafana for unified logs + metrics
-- **Node Exporter**: Deployed on all hosts via systemd service
-  - Exposes host metrics on port 9100
+- **Prometheus**: Metrics collection on the laptop, optionally duplicated on the Pi
+- **Grafana**: Dashboards and alerting on the laptop
+- **Uptime Kuma**: Service and endpoint monitoring with direct notifications
+- **Node Exporter**: Host metrics for the laptop and optional Pi
+- **Loki**: Optional if logs are useful enough to justify the extra moving part
+
+### Notifications and Alerting
+
+- **Primary recommendation**: Uptime Kuma for service checks and Grafana Alerting for system metrics
+- **Notification targets**: ntfy, email, Telegram, or Discord
+- **Redundancy option**: run a small checker on the Pi so it can alert when the laptop is down
 
 ### Infrastructure as Code (planned Phase 5)
 
@@ -86,42 +79,36 @@ Notes:
 
 ## Service Deployment Path
 
-1. **k3s Cluster on Pi4s** (Completed)
+1. **Docker Compose on the laptop** (Primary path)
 
-   - 2-node cluster (pi4-node1 as server, pi4-node2 as agent)
-   - Running monitoring stack: Prometheus, Grafana, Loki
-   - Node exporters on all hosts for metrics collection
-   - Simple architecture: no Traefik, using NodePort services
+- Run daily services in dedicated Compose projects such as `prod`, `staging`, and `ops`
+- Keep ports, volumes, and environment files separate by stage
 
-2. **Pi-hole on Pi3** (Completed)
+2. **Monitoring on the laptop** (Primary path)
 
-   - DNS filtering via Docker Compose
-   - Web interface on port 8080
-   - Network-wide ad blocking (after router DNS config)
+- Run Prometheus, Grafana, and Uptime Kuma locally
+- Send alerts to a notification channel instead of relying on dashboards alone
 
-3. **Docker Compose on main server** (Completed)
+3. **Monitoring on the Pi** (Optional redundancy)
 
-   - Jenkins CI/CD server (running on port 9080)
-   - Portfolio application (running on ports 80/443)
-   - Resource-intensive workloads
+- Run a second notifier or a minimal uptime checker
+- Keep one independent path that can alert if the laptop fails
 
-4. **Expand k3s workloads** (Future)
+4. **Local Kubernetes lab** (Optional)
 
-   - Deploy lightweight stateless apps to Pi4 cluster
-   - Experiment with persistent volumes
-   - Learn Kubernetes patterns (deployments, services, ingress)
+- Use `k3d` or `kind` on the laptop for pods, Helm charts, and ingress experiments
 
 5. **Cloud migration** (Future)
-   - Use Terraform and Kubernetes manifests for cloud deployments
-   - Maintain homelab for experimentation and local development
+
+- Reuse container and IaC patterns for cloud deployments later
 
 ---
 
 ## Network Architecture (current)
 
 - Flat LAN: `192.168.8.0/24`
-- TP-Link router handles DHCP and routing
-- Static IP assignments for all hosts
+- GL.iNet router handles DHCP, routing, and WireGuard
+- Static IP assignments only for the laptop, optional Pi, and infrastructure gear
 
 VLANs are a future possibility but not currently planned. If/when a VLAN-capable router is introduced, segmentation will be considered.
 
@@ -131,13 +118,13 @@ VLANs are a future possibility but not currently planned. If/when a VLAN-capable
 
 1. Write playbook or Dockerfile on workstation
 2. Commit to GitHub
-3. Ansible provisions hosts or Jenkins builds container
-4. Deploy to Docker Compose on x86 hosts or k3s on Pi cluster
-5. Monitor with Prometheus/Grafana
+3. Ansible provisions the router, laptop, and optional Pi
+4. Deploy to Docker Compose, a VM, or a local `k3d`/`kind` cluster
+5. Monitor with Prometheus/Grafana and alert with Uptime Kuma or Grafana Alerting
 6. Document in `docs/` with devlog entry
 
 ---
 
 ## Summary
 
-The software stack prioritizes open-source, widely-adopted DevOps tools. The progression is: automation (Ansible) → containers (Docker) → orchestration (k3s) → IaC (Terraform) → cloud. Each phase builds on the previous, ensuring reproducibility and cloud portability.
+The software stack prioritizes open-source, widely-adopted tools with less hardware overhead. The progression is: automation (Ansible) → containers (Docker Compose) → optional isolation (VMs) → local orchestration (`k3d`/`kind`) → IaC and cloud when needed.
